@@ -1,0 +1,173 @@
+<main class="login-layout">
+  <section class="brand-panel" aria-label="Northstar AI">
+    <a class="brand-lockup" routerLink="/" aria-label="Northstar AI home">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 36 36" fill="none">
+          <path d="M18 3.5 31 11v14L18 32.5 5 25V11L18 3.5Z" stroke="currentColor" stroke-width="1.6" />
+          <path d="m12 22 6-11 6 11M14 18h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+          <circle cx="27.5" cy="8.5" r="2" fill="#D98051" />
+        </svg>
+      </span>
+      <span class="brand-name">northstar<span>AI</span></span>
+    </a>
+
+    <div class="brand-story">
+      <p class="eyebrow">THINK CLEARER. MOVE FASTER.</p>
+      <h1>Intelligent solutions.<br /><span>Simplified workflows.</span></h1>
+      <p class="brand-description">
+        A calmer way to bring people, insight, and meaningful work together.
+      </p>
+    </div>
+
+    <div class="signal-art" aria-hidden="true">
+      <div class="art-grid"></div>
+      <div class="orbit orbit-outer"></div>
+      <div class="orbit orbit-inner"></div>
+      <div class="core-node"><span></span></div>
+      <span class="orbit-node node-one"></span>
+      <span class="orbit-node node-two"></span>
+      <span class="orbit-node node-three"></span>
+      <div class="insight-chip">
+        <span class="chip-spark">✳</span>
+        <span><strong>Insight, in focus</strong><small>Signal detected</small></span>
+        <span class="chip-status"></span>
+      </div>
+      <div class="art-caption"><span></span> CONNECTED INTELLIGENCE</div>
+    </div>
+
+    <p class="brand-footer">A more thoughtful way to work, every day.</p>
+  </section>
+
+  <section class="form-panel" aria-labelledby="login-heading">
+    <div class="login-content">
+      <div class="mobile-brand" aria-hidden="true">
+        <span class="brand-mark">
+          <svg viewBox="0 0 36 36" fill="none">
+            <path d="M18 3.5 31 11v14L18 32.5 5 25V11L18 3.5Z" stroke="currentColor" stroke-width="1.6" />
+            <path d="m12 22 6-11 6 11M14 18h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+            <circle cx="27.5" cy="8.5" r="2" fill="#D98051" />
+          </svg>
+        </span>
+        <span class="brand-name">northstar<span>AI</span></span>
+      </div>
+
+      <header class="form-header">
+        <p class="eyebrow">YOUR WORKSPACE AWAITS</p>
+        <h2 id="login-heading">Welcome Back</h2>
+        <p class="form-subtitle">Sign in to continue to your account</p>
+      </header>
+
+      <form class="login-form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+        <div class="field-group">
+          <label for="email">Work email</label>
+          <div class="input-wrap" [class.has-error]="form.controls.email.touched && form.controls.email.invalid">
+            <svg class="field-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <rect x="3.5" y="5" width="17" height="14" rx="2.5" stroke="currentColor" stroke-width="1.6" />
+              <path d="m5 7 7 5.5L19 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            <input
+              id="email"
+              type="email"
+              formControlName="email"
+              placeholder="Enter your email"
+              autocomplete="username"
+              aria-describedby="email-error"
+              [attr.aria-invalid]="form.controls.email.touched && form.controls.email.invalid"
+            />
+          </div>
+          @if (form.controls.email.touched && form.controls.email.hasError('required')) {
+            <p class="field-error" id="email-error">Email is required</p>
+          } @else if (form.controls.email.touched && form.controls.email.hasError('email')) {
+            <p class="field-error" id="email-error">Please enter a valid email address</p>
+          }
+        </div>
+
+        <div class="field-group">
+          <label for="password">Password</label>
+          <div class="input-wrap" [class.has-error]="form.controls.password.touched && form.controls.password.invalid">
+            <svg class="field-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <rect x="4.5" y="10" width="15" height="10.5" rx="2.5" stroke="currentColor" stroke-width="1.6" />
+              <path d="M8 10V7a4 4 0 0 1 8 0v3m-4 4v2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+            </svg>
+            <input
+              id="password"
+              [type]="passwordVisible() ? 'text' : 'password'"
+              formControlName="password"
+              placeholder="Enter your password"
+              autocomplete="current-password"
+              aria-describedby="password-error"
+              [attr.aria-invalid]="form.controls.password.touched && form.controls.password.invalid"
+            />
+            <button
+              class="visibility-toggle"
+              type="button"
+              [attr.aria-label]="passwordVisible() ? 'Hide password' : 'Show password'"
+              [attr.aria-pressed]="passwordVisible()"
+              (click)="togglePasswordVisibility()"
+            >
+              @if (passwordVisible()) {
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M3 3 21 21M10.6 10.7a2 2 0 0 0 2.7 2.7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+                  <path d="M9.9 5.2A10.8 10.8 0 0 1 12 5c5 0 8.5 4.5 9.5 7-.4 1-1.2 2.1-2.3 3.1M6.2 6.2C4.3 7.5 3 9.3 2.5 12c.8 2.1 3.9 7 9.5 7 1 0 2-.2 2.9-.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              } @else {
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M2.5 12S6 5 12 5s9.5 7 9.5 7-3.5 7-9.5 7-9.5-7-9.5-7Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
+                  <circle cx="12" cy="12" r="2.5" stroke="currentColor" stroke-width="1.6" />
+                </svg>
+              }
+            </button>
+          </div>
+          @if (form.controls.password.touched && form.controls.password.hasError('required')) {
+            <p class="field-error" id="password-error">Password is required</p>
+          } @else if (form.controls.password.touched && form.controls.password.hasError('minlength')) {
+            <p class="field-error" id="password-error">Password must contain at least 8 characters</p>
+          }
+        </div>
+
+        <div class="form-options">
+          <label class="remember-option">
+            <input type="checkbox" formControlName="rememberMe" />
+            <span class="custom-checkbox" aria-hidden="true">
+              <svg viewBox="0 0 16 16" fill="none"><path d="m3 8 3.2 3L13 4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
+            </span>
+            <span>Remember me</span>
+          </label>
+          <a class="text-link" routerLink="/forgot-password">Forgot password?</a>
+        </div>
+
+        @if (errorMessage()) {
+          <p class="auth-error" role="alert">
+            <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="7.5" stroke="currentColor" stroke-width="1.5" /><path d="M10 6.5v4m0 3h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
+            {{ errorMessage() }}
+          </p>
+        }
+
+        <button class="primary-button" type="submit" [disabled]="form.invalid || isSubmitting()">
+          @if (isSubmitting()) {
+            <span class="spinner" aria-hidden="true"></span>
+            <span>Signing in</span>
+          } @else {
+            <span>Sign in</span>
+            <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10h11m-4.5-4.5L15 10l-4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          }
+        </button>
+      </form>
+
+      <div class="divider" aria-hidden="true"><span></span><p>OR</p><span></span></div>
+
+      <button class="google-button" type="button" [disabled]="isSubmitting()" (click)="signInWithGoogle()">
+        <svg viewBox="0 0 20 20" aria-hidden="true">
+          <path fill="#4285F4" d="M19.6 10.23c0-.68-.06-1.36-.18-2.02H10v3.83h5.38a4.6 4.6 0 0 1-1.99 3.02v2.48h3.22c1.89-1.74 2.99-4.3 2.99-7.31Z" />
+          <path fill="#34A853" d="M10 20c2.7 0 4.97-.9 6.63-2.46l-3.22-2.48c-.9.6-2.05.95-3.4.95-2.61 0-4.83-1.76-5.62-4.12H1.06v2.56A10 10 0 0 0 10 20Z" />
+          <path fill="#FBBC05" d="M4.38 11.89a6 6 0 0 1 0-3.78V5.55H1.06a10 10 0 0 0 0 8.9l3.32-2.56Z" />
+          <path fill="#EA4335" d="M10 3.99c1.47 0 2.78.5 3.82 1.52l2.87-2.87C14.96.99 12.7 0 10 0a10 10 0 0 0-8.94 5.55l3.32 2.56C5.17 5.75 7.39 3.99 10 3.99Z" />
+        </svg>
+        Continue with Google
+      </button>
+
+      <p class="signup-prompt">Don't have an account? <a class="text-link" routerLink="/signup">Sign Up</a></p>
+      <p class="security-note"><span></span> Secure access to your organization</p>
+    </div>
+  </section>
+</main>

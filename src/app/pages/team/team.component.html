@@ -1,0 +1,38 @@
+<div class="page-container">
+  <header class="page-header">
+    <div><p class="eyebrow">WORKSPACE</p><h1>Team</h1><p>People, roles, and workload across your workspace.</p></div>
+    <button class="primary-action" type="button" (click)="showForm.set(true)">Add member</button>
+  </header>
+
+  <section class="page-toolbar" aria-label="Filter team members">
+    <input type="search" placeholder="Search people" aria-label="Search people" [ngModel]="search()" (ngModelChange)="search.set($event); loadMembers()" />
+    <select aria-label="Filter by department" [ngModel]="department()" (ngModelChange)="department.set($event); loadMembers()">
+      <option value="">All departments</option><option>Engineering</option><option>Design</option><option>Marketing</option><option>Operations</option><option>Product</option>
+    </select>
+    <span>{{ members().length }} members</span>
+  </section>
+
+  @if (loading()) { <p class="page-state" role="status">Loading team...</p> }
+  @else if (members().length === 0) { <p class="page-state">No team members match these filters.</p> }
+  @else {
+    <div class="table-scroll"><table class="data-table"><thead><tr><th>Member</th><th>Role</th><th>Department</th><th>Status</th><th>Tasks</th></tr></thead><tbody>
+      @for (member of members(); track member.id) {
+        <tr><td><span class="person-cell"><span class="person-avatar">{{ member.name[0] }}</span><span><strong>{{ member.name }}</strong><small>{{ member.email }}</small></span></span></td><td>{{ member.role }}</td><td>{{ member.department }}</td><td><span class="state-tag">{{ member.status }}</span></td><td>{{ member.completedTasksCount ?? 0 }} / {{ member.assignedTasksCount ?? 0 }} complete</td></tr>
+      }
+    </tbody></table></div>
+  }
+
+  @if (showForm()) {
+    <div class="modal-backdrop" (click)="showForm.set(false)"><section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="team-form-title" (click)="$event.stopPropagation()">
+      <h2 id="team-form-title">Add team member</h2>
+      @if (error()) { <p class="form-error" role="alert">{{ error() }}</p> }
+      <form (submit)="$event.preventDefault(); addMember()">
+        <label>Name<input [(ngModel)]="newMember.name" name="name" required minlength="2" /></label>
+        <label>Email<input type="email" [(ngModel)]="newMember.email" name="email" required /></label>
+        <label>Role<input [(ngModel)]="newMember.role" name="role" required /></label>
+        <label>Department<input [(ngModel)]="newMember.department" name="department" required /></label>
+        <div class="modal-actions"><button type="button" class="quiet-action" (click)="showForm.set(false)">Cancel</button><button type="submit" class="primary-action">Add member</button></div>
+      </form>
+    </section></div>
+  }
+</div>

@@ -1,0 +1,184 @@
+<div class="dashboard-content">
+  <section class="welcome-row">
+    <div>
+      <p class="eyebrow">YOUR WORKSPACE <span></span> TODAY</p>
+      <h1>Good day, {{ data().user?.name?.split(' ')?.[0] ?? 'there' }}</h1>
+      <p>Here is what is happening across your projects and team today.</p>
+    </div>
+  </section>
+
+  @if (loading()) {
+    <div class="state-card loading-state">
+      <div class="spinner"></div>
+      <p>Loading workplace insights...</p>
+    </div>
+  } @else if (error()) {
+    <div class="state-card error-state">
+      <p>{{ error() }}</p>
+      <button class="action-btn" (click)="loadData()">Retry</button>
+    </div>
+  } @else {
+    <section class="kpi-grid" aria-label="Workspace summary">
+      <article class="kpi-item">
+        <div class="kpi-top"><span>Active Projects</span><span class="kpi-icon green-icon">▧</span></div>
+        <div class="kpi-value">{{ data().metrics?.activeProjects ?? 0 }} <span class="trend positive">↗ 12%</span></div>
+        <p>Across all active initiatives</p>
+        <div class="sparkline green-line"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      </article>
+
+      <article class="kpi-item">
+        <div class="kpi-top"><span>Pending Tasks</span><span class="kpi-icon orange-icon">✓</span></div>
+        <div class="kpi-value">{{ data().metrics?.pendingTasks ?? 0 }} <span class="trend neutral">In progress</span></div>
+        <p>Awaiting completion</p>
+        <div class="sparkline orange-line"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      </article>
+
+      <article class="kpi-item">
+        <div class="kpi-top"><span>Completed Tasks</span><span class="kpi-icon teal-icon">◉</span></div>
+        <div class="kpi-value">{{ data().metrics?.completedTasks ?? 0 }} <span class="trend positive">↗ 18%</span></div>
+        <p>Completed across team</p>
+        <div class="sparkline teal-line"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      </article>
+
+      <article class="kpi-item">
+        <div class="kpi-top"><span>Team Members</span><span class="kpi-icon blue-icon">♙</span></div>
+        <div class="kpi-value">{{ data().metrics?.teamMembers ?? 0 }} <span class="kpi-note">Active users</span></div>
+        <p>Collaborating today</p>
+        <div class="sparkline blue-line"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      </article>
+
+      <article class="kpi-item">
+        <div class="kpi-top"><span>Upcoming Meetings</span><span class="kpi-icon meeting-icon">◷</span></div>
+        <div class="kpi-value">{{ data().metrics?.upcomingMeetings ?? 0 }} <span class="kpi-note">Scheduled</span></div>
+        <p>On calendar</p>
+        <div class="sparkline orange-line"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      </article>
+    </section>
+
+    <div class="dashboard-grid">
+      <section class="content-panel tasks-panel">
+        <div class="section-heading">
+          <div><h2>My tasks</h2><p>Your prioritized tasks and action items.</p></div>
+          <a routerLink="/tasks">View all <span>↗</span></a>
+        </div>
+        <div class="task-table-wrap">
+          @if (data().tasks.length === 0) {
+            <p class="empty-text">No pending tasks found. All caught up!</p>
+          } @else {
+            <table>
+              <thead>
+                <tr>
+                  <th>TASK</th>
+                  <th>PROJECT</th>
+                  <th>PRIORITY</th>
+                  <th>DUE DATE</th>
+                  <th>STATUS</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (task of data().tasks; track task.id || task.title) {
+                  <tr>
+                    <td>
+                      <button type="button" class="task-check" [class.checked]="task.status === 'Completed' || task.status === 'COMPLETED'" (click)="toggleTask(task)" [attr.aria-label]="'Mark ' + task.title + ' complete'">
+                        {{ task.status === 'Completed' || task.status === 'COMPLETED' ? '✓' : '' }}
+                      </button>
+                      <strong>{{ task.title }}</strong>
+                    </td>
+                    <td class="muted-cell">{{ task.project }}</td>
+                    <td>
+                      <span class="priority" [class]="'priority ' + (task.priority | lowercase)"><i></i>{{ task.priority }}</span>
+                    </td>
+                    <td class="muted-cell">{{ task.dueDate }}</td>
+                    <td>
+                      <span class="status" [class]="'status ' + (task.status | lowercase)">{{ task.status }}</span>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          }
+        </div>
+      </section>
+
+      <section class="content-panel schedule-panel">
+        <div class="section-heading">
+          <div><h2>Upcoming schedule</h2><p>Today &amp; upcoming events</p></div>
+          <a routerLink="/calendar">Open calendar <span>↗</span></a>
+        </div>
+        <div class="schedule-list">
+          @if (data().schedule.length === 0) {
+            <p class="empty-text">No scheduled events today.</p>
+          } @else {
+            @for (event of data().schedule; track event.id || event.title) {
+              <article class="schedule-item">
+                <time>{{ event.time }}</time>
+                <span class="schedule-marker" [class]="'schedule-marker ' + (event.kind || 'meeting')"></span>
+                <div>
+                  <strong>{{ event.title }}</strong>
+                  <small>{{ event.detail }}</small>
+                </div>
+                <span class="event-type">{{ event.kind }}</span>
+              </article>
+            }
+          }
+        </div>
+      </section>
+
+      <section class="content-panel projects-panel">
+        <div class="section-heading">
+          <div><h2>Active projects</h2><p>Real-time momentum and completion rates.</p></div>
+          <a routerLink="/projects">All projects <span>↗</span></a>
+        </div>
+        <div class="project-list">
+          @if (data().projects.length === 0) {
+            <p class="empty-text">No active projects available.</p>
+          } @else {
+            @for (project of data().projects; track project.id || project.name) {
+              <article class="project-item">
+                <div class="project-title-row">
+                  <div class="project-symbol" [class]="'project-symbol ' + (project.tone || 'green')">{{ project.name[0] }}</div>
+                  <div class="project-title">
+                    <strong><a [routerLink]="['/projects', project.id]" class="project-link">{{ project.name }}</a></strong>
+                    <small>{{ project.description }}</small>
+                  </div>
+                  <span class="project-status"><i></i>{{ project.status }}</span>
+                </div>
+                <div class="progress-row">
+                  <div class="progress-track"><span [class]="'progress-fill ' + (project.tone || 'green')" [style.width.%]="project.progress"></span></div>
+                  <strong>{{ project.progress }}%</strong>
+                </div>
+                <div class="project-foot">
+                  <div class="member-stack">
+                    @for (member of (project.initials || ['NS']); track member) { <span>{{ member }}</span> }
+                  </div>
+                  <small>Due {{ project.deadline || project.dueDate }}</small>
+                </div>
+              </article>
+            }
+          }
+        </div>
+      </section>
+
+      <section class="content-panel activity-panel">
+        <div class="section-heading">
+          <div><h2>Recent activity</h2><p>Latest updates from your team.</p></div>
+        </div>
+        <div class="activity-list">
+          @if (data().activity.length === 0) {
+            <p class="empty-text">No activity logged yet.</p>
+          } @else {
+            @for (act of data().activity; track act.id || (act.person + act.time)) {
+              <article class="activity-item">
+                <span class="activity-avatar" [class]="'activity-avatar ' + (act.tone || 'green')">{{ act.initials }}</span>
+                <p>
+                  <strong>{{ act.person }}</strong> {{ act.action }} <b>{{ act.subject }}</b>
+                  <small>{{ act.time }}</small>
+                </p>
+              </article>
+            }
+          }
+        </div>
+      </section>
+    </div>
+  }
+</div>

@@ -1,0 +1,30 @@
+<div class="page-container">
+  <header class="page-header"><div><p class="eyebrow">WORKSPACE</p><h1>Reports</h1><p>Delivery status and workload across projects and teams.</p></div></header>
+
+  @if (loading()) { <p class="page-state" role="status">Loading reports...</p> }
+  @else if (error()) { <p class="page-state" role="alert">{{ error() }}</p> }
+  @else if (report(); as data) {
+    <section class="report-grid" aria-label="Workspace report summary">
+      <article class="report-stat"><span>Total tasks</span><strong>{{ data.taskStats.total }}</strong><small>{{ data.taskStats.highPriority }} high priority</small></article>
+      <article class="report-stat"><span>Completed</span><strong>{{ data.taskStats.completed }}</strong><small>{{ percent(data.taskStats.completed, data.taskStats.total) }}% of all tasks</small></article>
+      <article class="report-stat"><span>In progress</span><strong>{{ data.taskStats.inProgress }}</strong><small>{{ data.taskStats.todo }} not started</small></article>
+      <article class="report-stat"><span>Active projects</span><strong>{{ data.projectStats.active }}</strong><small>{{ data.projectStats.total }} total projects</small></article>
+    </section>
+
+    <section class="report-section" aria-labelledby="task-breakdown-heading">
+      <h2 id="task-breakdown-heading">Task breakdown</h2>
+      <div class="report-bar-row"><span>Completed</span><div class="report-track"><span class="report-fill completed-fill" [style.width.%]="percent(data.taskStats.completed, data.taskStats.total)"></span></div><strong>{{ data.taskStats.completed }}</strong></div>
+      <div class="report-bar-row"><span>In progress</span><div class="report-track"><span class="report-fill progress-fill" [style.width.%]="percent(data.taskStats.inProgress, data.taskStats.total)"></span></div><strong>{{ data.taskStats.inProgress }}</strong></div>
+      <div class="report-bar-row"><span>To do</span><div class="report-track"><span class="report-fill todo-fill" [style.width.%]="percent(data.taskStats.todo, data.taskStats.total)"></span></div><strong>{{ data.taskStats.todo }}</strong></div>
+    </section>
+
+    <section class="report-section" aria-labelledby="team-workload-heading">
+      <h2 id="team-workload-heading">Team workload</h2>
+      <div class="table-scroll"><table class="data-table"><thead><tr><th>Member</th><th>Role</th><th>Department</th><th>Assigned</th><th>Completed</th><th>Completion</th></tr></thead><tbody>
+        @for (member of data.teamWorkload; track member.id) {
+          <tr><td><strong>{{ member.name }}</strong></td><td>{{ member.role }}</td><td>{{ member.department }}</td><td>{{ member.assigned_tasks }}</td><td>{{ member.completed_tasks }}</td><td>{{ percent(member.completed_tasks, member.assigned_tasks) }}%</td></tr>
+        }
+      </tbody></table></div>
+    </section>
+  }
+</div>

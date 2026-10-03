@@ -1,0 +1,31 @@
+<div class="page-container">
+  <header class="page-header">
+    <div><p class="eyebrow">WORKSPACE</p><h1>Calendar</h1><p>Meetings, milestones, and upcoming deadlines.</p></div>
+    <button class="primary-action" type="button" (click)="showForm.set(true)">Schedule event</button>
+  </header>
+
+  @if (loading()) { <p class="page-state" role="status">Loading calendar...</p> }
+  @else if (events().length === 0) { <p class="page-state">No upcoming events.</p> }
+  @else {
+    <section class="event-list" aria-label="Upcoming events">
+      @for (event of events(); track event.id ?? event.title) {
+        <article class="event-row"><time>{{ event.startTime | date:'EEE, MMM d · h:mm a' }}</time><span class="event-marker"></span><div><h2>{{ event.title }}</h2><p>{{ event.description || event.project || 'Workspace event' }}</p><small>{{ event.eventType }} · {{ event.project || 'General' }}</small></div><button class="quiet-action" type="button" (click)="deleteEvent(event)" aria-label="Delete {{ event.title }}">Delete</button></article>
+      }
+    </section>
+  }
+
+  @if (showForm()) {
+    <div class="modal-backdrop" (click)="showForm.set(false)"><section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="event-form-title" (click)="$event.stopPropagation()">
+      <h2 id="event-form-title">Schedule an event</h2>
+      @if (error()) { <p class="form-error" role="alert">{{ error() }}</p> }
+      <form (submit)="$event.preventDefault(); addEvent()">
+        <label>Title<input [(ngModel)]="newEvent.title" name="title" required minlength="2" /></label>
+        <label>Description<textarea [(ngModel)]="newEvent.description" name="description" rows="3"></textarea></label>
+        <label>Type<select [(ngModel)]="newEvent.event_type" name="event_type"><option value="MEETING">Meeting</option><option value="EVENT">Event</option><option value="DEADLINE">Deadline</option><option value="REMINDER">Reminder</option></select></label>
+        <label>Starts<input type="datetime-local" [(ngModel)]="newEvent.start_time" name="start_time" required /></label>
+        <label>Ends<input type="datetime-local" [(ngModel)]="newEvent.end_time" name="end_time" required /></label>
+        <div class="modal-actions"><button type="button" class="quiet-action" (click)="showForm.set(false)">Cancel</button><button type="submit" class="primary-action">Save event</button></div>
+      </form>
+    </section></div>
+  }
+</div>

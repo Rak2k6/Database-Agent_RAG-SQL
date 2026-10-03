@@ -1,0 +1,131 @@
+<div class="page-container projects-page">
+  <header class="page-header">
+    <div>
+      <h1>Workspace Projects</h1>
+      <p>Track progress, milestones, and cross-functional team execution.</p>
+    </div>
+    <button type="button" class="create-button" (click)="openCreateModal()"><span>＋</span> Create Project</button>
+  </header>
+
+  <section class="toolbar-card">
+    <div class="filter-controls">
+      <input type="search" placeholder="Search projects..." aria-label="Search projects" [ngModel]="search()" (ngModelChange)="search.set($event); loadProjects()" class="search-input" />
+
+      <select [ngModel]="selectedStatus()" (ngModelChange)="selectedStatus.set($event); loadProjects()" class="select-input">
+        <option value="">All Statuses</option>
+        <option value="ACTIVE">Active</option>
+        <option value="PLANNED">Planned</option>
+        <option value="ON_HOLD">On Hold</option>
+        <option value="COMPLETED">Completed</option>
+        <option value="ARCHIVED">Archived</option>
+      </select>
+    </div>
+  </section>
+
+  @if (loading()) {
+    <div class="state-card loading-state">
+      <div class="spinner"></div>
+      <p>Loading projects...</p>
+    </div>
+  } @else if (error()) {
+    <div class="state-card error-state" role="alert">
+      <p>{{ error() }}</p>
+      <button type="button" class="quiet-action" (click)="loadProjects()">Retry</button>
+    </div>
+  } @else if (projects().length === 0) {
+    <div class="state-card empty-state">
+      <h3>No projects yet</h3>
+      <p>Create your first project to organize tasks and collaborate with your team.</p>
+      <button class="create-button inline-btn" (click)="openCreateModal()">＋ Create Project</button>
+    </div>
+  } @else {
+    <div class="projects-grid">
+      @for (p of projects(); track p.id) {
+        <article class="project-card">
+          <div class="card-head">
+            <div class="project-symbol green">{{ p.name?.[0] ?? 'P' }}</div>
+            <div>
+              <h3><a [routerLink]="['/projects', p.id]">{{ p.name }}</a></h3>
+              <span class="status-badge" [ngClass]="'status-badge ' + p.status.toLowerCase().replace('_', '-')">{{ formatStatus(p.status) }}</span>
+            </div>
+            <div class="project-actions">
+              <button type="button" class="action-icon-btn" (click)="openEditModal(p)" [attr.aria-label]="'Edit ' + p.name" title="Edit project">✎</button>
+              <button type="button" class="action-icon-btn delete-action" (click)="deleteProject(p)" [attr.aria-label]="'Delete ' + p.name" title="Delete project">×</button>
+            </div>
+          </div>
+
+          <p class="card-desc">{{ p.description }}</p>
+
+          <div class="card-progress">
+            <div class="progress-bar-row">
+              <div class="progress-track">
+                <span class="progress-fill green" [style.width.%]="p.progress"></span>
+              </div>
+              <strong class="progress-val">{{ p.progress }}%</strong>
+            </div>
+            <div class="progress-sub">
+              <span>{{ p.completedTasks }} / {{ p.totalTasks }} tasks completed</span>
+            </div>
+          </div>
+
+          <div class="card-foot">
+            <div class="member-stack">
+              @for (m of (p.members || []); track m.id) {
+                <span title="{{ m.name }} ({{ m.role }})">{{ m.name[0] }}</span>
+              }
+            </div>
+            <span class="due-text">Due {{ p.dueDate || p.deadline }}</span>
+          </div>
+        </article>
+      }
+    </div>
+  }
+
+  @if (showModal()) {
+    <div class="modal-backdrop" (click)="closeCreateModal()">
+      <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="project-form-title" (click)="$event.stopPropagation()">
+        <h2 id="project-form-title">{{ editingProjectId() ? 'Edit Project' : 'Create New Project' }}</h2>
+        <form (submit)="$event.preventDefault(); submitProject()">
+          @if (error()) { <p class="form-error" role="alert">{{ error() }}</p> }
+          <div class="form-group">
+            <label>Project Name *</label>
+            <input type="text" [(ngModel)]="newProject.name" name="name" required placeholder="e.g. Platform Refresh" class="form-control" />
+          </div>
+
+          <div class="form-group">
+            <label>Description</label>
+            <textarea [(ngModel)]="newProject.description" name="description" rows="3" placeholder="Overview of goals and scope..." class="form-control"></textarea>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group col">
+              <label>Status</label>
+              <select [(ngModel)]="newProject.status" name="status" class="form-control">
+                <option value="ACTIVE">Active</option>
+                <option value="PLANNED">Planned</option>
+                <option value="ON_HOLD">On Hold</option>
+                <option value="COMPLETED">Completed</option>
+                <option value="ARCHIVED">Archived</option>
+              </select>
+            </div>
+
+            <div class="form-group col">
+              <label>Start Date</label>
+              <input type="date" [(ngModel)]="newProject.start_date" name="start_date" required class="form-control" />
+            </div>
+
+            <div class="form-group col">
+              <label>Due Date</label>
+              <input type="date" [(ngModel)]="newProject.due_date" name="due_date" required class="form-control" />
+            </div>
+          </div>
+
+          <div class="modal-actions">
+            <button type="button" class="cancel-btn" (click)="closeCreateModal()">Cancel</button>
+            <button type="submit" class="submit-btn" [disabled]="submitting()">{{ submitting() ? 'Saving...' : editingProjectId() ? 'Save Changes' : 'Create Project' }}</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  }
+</div>

@@ -1,0 +1,174 @@
+<div class="page-container tasks-page">
+  <header class="page-header">
+    <div>
+      <h1>Tasks &amp; Work Items</h1>
+      <p>Manage, track, and complete your project deliverables.</p>
+    </div>
+    <button type="button" class="create-button" (click)="openCreateModal()"><span>＋</span> Create Task</button>
+  </header>
+
+  <section class="toolbar-card">
+    <div class="filter-tabs">
+      <button [class.active]="activeTab() === 'ALL'" (click)="setTab('ALL')">All Tasks</button>
+      <button [class.active]="activeTab() === 'MINE'" (click)="setTab('MINE')">Assigned to Me</button>
+      <button [class.active]="activeTab() === 'TODO'" (click)="setTab('TODO')">To Do</button>
+      <button [class.active]="activeTab() === 'IN_PROGRESS'" (click)="setTab('IN_PROGRESS')">In Progress</button>
+      <button [class.active]="activeTab() === 'COMPLETED'" (click)="setTab('COMPLETED')">Completed</button>
+      <button [class.active]="activeTab() === 'OVERDUE'" (click)="setTab('OVERDUE')">Overdue</button>
+    </div>
+
+    <div class="filter-controls">
+      <input type="search" placeholder="Search tasks..." aria-label="Search tasks" [ngModel]="search()" (ngModelChange)="search.set($event); loadTasks()" class="search-input" />
+
+      <select [ngModel]="selectedPriority()" (ngModelChange)="selectedPriority.set($event); loadTasks()" class="select-input">
+        <option value="">All Priorities</option>
+        <option value="HIGH">High Priority</option>
+        <option value="MEDIUM">Medium Priority</option>
+        <option value="LOW">Low Priority</option>
+      </select>
+
+      <select [ngModel]="selectedProject()" (ngModelChange)="selectedProject.set($event); loadTasks()" class="select-input">
+        <option value="">All Projects</option>
+        @for (p of projects(); track p.id) {
+          <option [value]="p.id">{{ p.name }}</option>
+        }
+      </select>
+    </div>
+  </section>
+
+  @if (loading()) {
+    <div class="state-card loading-state">
+      <div class="spinner"></div>
+      <p>Loading tasks...</p>
+    </div>
+  } @else if (error()) {
+    <div class="state-card error-state" role="alert">
+      <p>{{ error() }}</p>
+      <button type="button" class="quiet-action" (click)="loadTasks()">Retry</button>
+    </div>
+  } @else if (tasks().length === 0) {
+    <div class="state-card empty-state">
+      <h3>No tasks found</h3>
+      <p>Try adjusting your search or filters, or create a new task to get started.</p>
+      <button class="create-button inline-btn" (click)="openCreateModal()">＋ Create Task</button>
+    </div>
+  } @else {
+    <div class="content-panel">
+      <div class="task-table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>STATUS</th>
+              <th>TASK TITLE</th>
+              <th>PROJECT</th>
+              <th>PRIORITY</th>
+              <th>ASSIGNED TO</th>
+              <th>DUE DATE</th>
+              <th>ACTIONS</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (task of tasks(); track task.id) {
+              <tr [class.overdue-row]="task.isOverdue">
+                <td>
+                  <select [ngModel]="task.status" (ngModelChange)="updateStatus(task, $event)" class="status-select" [ngClass]="'status ' + task.status.toLowerCase().replace('_', '-')">
+                    <option value="TODO">To Do</option>
+                    <option value="IN_PROGRESS">In Progress</option>
+                    <option value="COMPLETED">Completed</option>
+                    <option value="CANCELLED">Cancelled</option>
+                  </select>
+                </td>
+                <td>
+                  <strong>{{ task.title }}</strong>
+                  @if (task.description) { <small class="desc-text">{{ task.description }}</small> }
+                </td>
+                <td class="muted-cell">{{ task.project }}</td>
+                <td>
+                  <span class="priority" [class]="'priority ' + (task.priority | lowercase)"><i></i>{{ task.priority }}</span>
+                </td>
+                <td><span class="user-badge">{{ task.assignedTo || 'Unassigned' }}</span></td>
+                <td>
+                  <span [class.overdue-tag]="task.isOverdue">{{ task.dueDate }}</span>
+                </td>
+                <td>
+                  <button type="button" class="action-icon-btn" (click)="openEditModal(task)" [attr.aria-label]="'Edit ' + task.title" title="Edit task">✎</button>
+                  <button type="button" class="action-icon-btn delete-action" (click)="deleteTask(task.id)" [attr.aria-label]="'Delete ' + task.title" title="Delete task">×</button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  }
+
+  @if (showModal()) {
+    <div class="modal-backdrop" (click)="closeCreateModal()">
+      <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="task-form-title" (click)="$event.stopPropagation()">
+        <h2 id="task-form-title">{{ editingTaskId() ? 'Edit Task' : 'Create New Task' }}</h2>
+        <form (submit)="$event.preventDefault(); submitTask()">
+          @if (error()) { <p class="form-error" role="alert">{{ error() }}</p> }
+          <div class="form-group">
+            <label>Task Title *</label>
+            <input type="text" [(ngModel)]="newTask.title" name="title" required placeholder="e.g. Review release notes" class="form-control" />
+          </div>
+
+          <div class="form-group">
+            <label>Project *</label>
+            <select [(ngModel)]="newTask.project_id" name="project_id" required class="form-control">
+              @for (p of projects(); track p.id) {
+                <option [value]="p.id">{{ p.name }}</option>
+              }
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Assign To</label>
+            <select [(ngModel)]="newTask.assigned_to" name="assigned_to" class="form-control">
+              <option value="">Unassigned</option>
+              @for (m of teamMembers(); track m.id) {
+                <option [value]="m.id">{{ m.name }} ({{ m.role }})</option>
+              }
+            </select>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group col">
+              <label>Priority</label>
+              <select [(ngModel)]="newTask.priority" name="priority" class="form-control">
+                <option value="HIGH">High</option>
+                <option value="MEDIUM">Medium</option>
+                <option value="LOW">Low</option>
+              </select>
+            </div>
+
+            <div class="form-group col">
+              <label>Due Date</label>
+              <input type="date" [(ngModel)]="newTask.due_date" name="due_date" required class="form-control" />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Status</label>
+            <select [(ngModel)]="newTask.status" name="status" class="form-control">
+              <option value="TODO">To Do</option>
+              <option value="IN_PROGRESS">In Progress</option>
+              <option value="COMPLETED">Completed</option>
+              <option value="CANCELLED">Cancelled</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Description</label>
+            <textarea [(ngModel)]="newTask.description" name="description" rows="3" placeholder="Task details and instructions..." class="form-control"></textarea>
+          </div>
+
+          <div class="modal-actions">
+            <button type="button" class="cancel-btn" (click)="closeCreateModal()">Cancel</button>
+            <button type="submit" class="submit-btn" [disabled]="submitting()">{{ submitting() ? 'Saving...' : editingTaskId() ? 'Save Changes' : 'Create Task' }}</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  }
+</div>

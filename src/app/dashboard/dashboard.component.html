@@ -1,0 +1,57 @@
+<div class="workspace-shell">
+  <aside class="sidebar" aria-label="Main navigation">
+    <a class="brand-lockup" routerLink="/dashboard" aria-label="Northstar AI dashboard">
+      <span class="brand-mark" aria-hidden="true">N</span><span class="brand-name">northstar<span>AI</span></span>
+    </a>
+    <p class="nav-label">WORKSPACE</p>
+    <nav class="primary-nav">
+      @for (item of [
+        { name: 'Dashboard', icon: 'grid' },
+        { name: 'My Tasks', icon: 'check' },
+        { name: 'Projects', icon: 'layers' },
+        { name: 'Team', icon: 'users' },
+        { name: 'Calendar', icon: 'calendar' },
+        { name: 'Documents', icon: 'file' },
+        { name: 'Reports', icon: 'chart' }
+      ]; track item.name) {
+        <a [routerLink]="item.name === 'Dashboard' ? '/dashboard' : '/' + item.name.toLowerCase().replace('my ', '')" routerLinkActive="active">
+          <span class="nav-icon" aria-hidden="true">{{ item.name === 'Dashboard' ? '◫' : item.name === 'My Tasks' ? '✓' : item.name === 'Projects' ? '▧' : item.name === 'Team' ? '◉' : item.name === 'Calendar' ? '□' : item.name === 'Documents' ? '≡' : '⌁' }}</span>{{ item.name }}
+          @if (item.name === 'My Tasks') { <span class="nav-count">4</span> }
+        </a>
+      }
+    </nav>
+    <div class="sidebar-bottom">
+      <a routerLink="/settings" routerLinkActive="active"><span class="nav-icon" aria-hidden="true">⚙</span>Settings</a>
+      <button class="sidebar-user" type="button" (click)="logout()">
+        <span class="avatar" [class.user-image]="user()?.profileImage" [style.background-image]="user()?.profileImage ? 'url(' + user()?.profileImage + ')' : null">{{ user()?.profileImage ? '' : initials() }}</span>
+        <span class="user-copy"><strong>{{ user()?.name ?? 'Workspace user' }}</strong><small>Sign out</small></span>
+        <span class="logout-mark" aria-hidden="true">↗</span>
+      </button>
+    </div>
+  </aside>
+
+  <main class="main-area">
+    <header class="topbar">
+      <div class="breadcrumb"><span>Workspace</span><span class="crumb-slash">/</span><strong>{{ activeNav() }}</strong></div>
+      <div class="topbar-actions">
+        <label class="search-box">
+          <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="8.8" cy="8.8" r="5.8" stroke="currentColor" stroke-width="1.5" /><path d="m13.2 13.2 4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
+          <input type="search" placeholder="Search anything" aria-label="Search anything" />
+          <kbd>⌘ K</kbd>
+        </label>
+        <button class="icon-button notification-button" type="button" aria-label="Notifications"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M15 7.5a5 5 0 0 0-10 0c0 5-2 5-2 6.5h14c0-1.5-2-1.5-2-6.5ZM8 17h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></svg><i></i></button>
+        <div class="profile-menu-wrap">
+          <button class="profile-button" type="button" [attr.aria-expanded]="profileOpen()" (click)="profileOpen.update((open) => !open)">
+            <span class="avatar small-avatar" [class.user-image]="user()?.profileImage" [style.background-image]="user()?.profileImage ? 'url(' + user()?.profileImage + ')' : null">{{ user()?.profileImage ? '' : initials() }}</span>
+            <span>{{ user()?.name ?? 'Workspace user' }}</span><span class="chevron">⌄</span>
+          </button>
+          @if (profileOpen()) { <div class="profile-dropdown"><strong>{{ user()?.name }}</strong><small>{{ user()?.email }}</small><button type="button" (click)="logout()">Sign out</button></div> }
+        </div>
+      </div>
+    </header>
+
+    <div class="dashboard-content">
+      <router-outlet />
+    </div>
+  </main>
+</div>

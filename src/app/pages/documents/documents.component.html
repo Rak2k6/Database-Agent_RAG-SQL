@@ -1,0 +1,37 @@
+<div class="page-container">
+  <header class="page-header">
+    <div><p class="eyebrow">WORKSPACE</p><h1>Documents</h1><p>Shared project files and reference material.</p></div>
+    <button class="primary-action" type="button" (click)="showForm.set(true)">Add document</button>
+  </header>
+
+  <section class="page-toolbar" aria-label="Search documents">
+    <input type="search" placeholder="Search documents" aria-label="Search documents" [ngModel]="search()" (ngModelChange)="search.set($event); loadDocuments()" />
+    <span>{{ documents().length }} documents</span>
+  </section>
+
+  @if (loading()) { <p class="page-state" role="status">Loading documents...</p> }
+  @else if (documents().length === 0) { <p class="page-state">No documents found.</p> }
+  @else {
+    <div class="table-scroll"><table class="data-table"><thead><tr><th>Name</th><th>Folder</th><th>Project</th><th>Added by</th><th>Size</th><th>Added</th><th></th></tr></thead><tbody>
+      @for (document of documents(); track document.id) {
+        <tr><td><strong>{{ document.name }}</strong><small class="table-subtext">{{ document.fileName }} · {{ document.fileType }}</small></td><td>{{ document.folder }}</td><td>{{ document.project }}</td><td>{{ document.uploadedBy }}</td><td>{{ formatSize(document.fileSize) }}</td><td>{{ document.createdAt | date:'mediumDate' }}</td><td><button class="quiet-action" type="button" (click)="deleteDocument(document)" aria-label="Delete {{ document.name }}">Delete</button></td></tr>
+      }
+    </tbody></table></div>
+  }
+
+  @if (showForm()) {
+    <div class="modal-backdrop" (click)="showForm.set(false)"><section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="document-form-title" (click)="$event.stopPropagation()">
+      <h2 id="document-form-title">Add document record</h2>
+      <p class="form-note">This records file details in the workspace; it does not upload file contents.</p>
+      @if (error()) { <p class="form-error" role="alert">{{ error() }}</p> }
+      <form (submit)="$event.preventDefault(); addDocument()">
+        <label>Display name<input [(ngModel)]="newDocument.name" name="name" required minlength="2" /></label>
+        <label>File name<input [(ngModel)]="newDocument.file_name" name="file_name" required /></label>
+        <label>File type<input [(ngModel)]="newDocument.file_type" name="file_type" required /></label>
+        <label>Size in bytes<input type="number" [(ngModel)]="newDocument.file_size" name="file_size" required min="1" /></label>
+        <label>Folder<input [(ngModel)]="newDocument.folder" name="folder" required /></label>
+        <div class="modal-actions"><button type="button" class="quiet-action" (click)="showForm.set(false)">Cancel</button><button type="submit" class="primary-action">Add record</button></div>
+      </form>
+    </section></div>
+  }
+</div>

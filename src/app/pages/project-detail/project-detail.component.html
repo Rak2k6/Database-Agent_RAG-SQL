@@ -1,0 +1,92 @@
+<div class="page-container project-detail-page">
+  @if (loading()) {
+    <section class="detail-state" role="status">
+      <span class="spinner" aria-hidden="true"></span>
+      <p>Loading project...</p>
+    </section>
+  } @else if (error()) {
+    <section class="detail-state error-state" role="alert">
+      <p>{{ error() }}</p>
+      <a class="quiet-action" routerLink="/projects">Back to projects</a>
+    </section>
+  } @else if (project(); as current) {
+    <nav class="project-breadcrumb" aria-label="Breadcrumb">
+      <a routerLink="/projects">Projects</a>
+      <span aria-hidden="true">/</span>
+      <span aria-current="page">{{ current.name }}</span>
+    </nav>
+
+    <header class="project-hero">
+      <div class="project-heading">
+        <div class="project-heading-top">
+          <span class="project-mark" aria-hidden="true">{{ current.name?.[0] ?? 'P' }}</span>
+          <span class="status-badge" [ngClass]="'status-badge ' + current.status.toLowerCase().replace('_', '-')">
+            {{ formatStatus(current.status) }}
+          </span>
+        </div>
+        <h1>{{ current.name }}</h1>
+        <p>{{ current.description || 'No project description has been added.' }}</p>
+      </div>
+      <button class="danger-action" type="button" (click)="deleteProject()">Delete project</button>
+    </header>
+
+    <section class="project-summary" aria-label="Project progress">
+      <div class="summary-progress">
+        <div class="summary-label-row">
+          <div>
+            <span class="section-kicker">PROJECT PROGRESS</span>
+            <strong>{{ current.progress }}%</strong>
+          </div>
+          <span>{{ current.completedTasks ?? 0 }} of {{ current.totalTasks ?? 0 }} tasks complete</span>
+        </div>
+        <div class="progress-track" role="progressbar" [attr.aria-valuenow]="current.progress" aria-valuemin="0" aria-valuemax="100" [attr.aria-label]="'Project progress: ' + current.progress + '%'">
+          <span class="progress-fill" [style.width.%]="current.progress"></span>
+        </div>
+      </div>
+      <div class="summary-dates">
+        <div>
+          <span class="section-kicker">START DATE</span>
+          <strong>{{ current.startDate ? (current.startDate | date: 'MMM d, y') : 'Not set' }}</strong>
+        </div>
+        <div>
+          <span class="section-kicker">DUE DATE</span>
+          <strong>{{ (current.dueDate || current.deadline) ? ((current.dueDate || current.deadline) | date: 'MMM d, y') : 'Not set' }}</strong>
+        </div>
+      </div>
+    </section>
+
+    <section class="project-tasks" aria-labelledby="project-tasks-heading">
+      <div class="tasks-heading">
+        <div>
+          <span class="section-kicker">WORKSTREAM</span>
+          <h2 id="project-tasks-heading">Project tasks</h2>
+        </div>
+        <span class="task-total">{{ current.tasks?.length ?? 0 }} tasks</span>
+      </div>
+      @if ((current.tasks?.length ?? 0) > 0) {
+        <div class="task-list">
+          @for (task of current.tasks ?? []; track task.id ?? task.title) {
+            <article class="task-row" [class.task-complete]="isTaskCompleted(task)">
+              <button class="task-toggle" type="button" [attr.aria-pressed]="isTaskCompleted(task)" [attr.aria-label]="(isTaskCompleted(task) ? 'Mark incomplete: ' : 'Mark complete: ') + task.title" (click)="toggleTask(task)">
+                <span aria-hidden="true">{{ isTaskCompleted(task) ? '✓' : '' }}</span>
+              </button>
+              <div class="task-copy">
+                <strong>{{ task.title }}</strong>
+                @if (task.description) { <p>{{ task.description }}</p> }
+              </div>
+              <span class="task-status" [ngClass]="'task-status ' + taskStatusClass(task.status)">{{ formatStatus(task.status) }}</span>
+              <span class="task-assignee">{{ task.assignedTo ?? 'Unassigned' }}</span>
+              <time class="task-due" [attr.datetime]="task.dueDate">{{ task.dueDate | date: 'MMM d, y' }}</time>
+            </article>
+          }
+        </div>
+      } @else {
+        <div class="tasks-empty">
+          <span class="empty-mark" aria-hidden="true">＋</span>
+          <strong>No tasks in this project</strong>
+          <p>Tasks added to this project will appear here.</p>
+        </div>
+      }
+    </section>
+  }
+</div>

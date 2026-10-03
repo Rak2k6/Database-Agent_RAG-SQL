@@ -1,0 +1,29 @@
+<div class="page-container">
+  <header class="page-header"><div><p class="eyebrow">WORKSPACE</p><h1>Settings</h1><p>Manage your profile and workspace notifications.</p></div></header>
+
+  @if (loading()) { <p class="page-state" role="status">Loading settings...</p> }
+  @else {
+    <form class="settings-form" (submit)="$event.preventDefault(); saveSettings()">
+      <section class="settings-section" aria-labelledby="profile-heading">
+        <h2 id="profile-heading">Profile</h2>
+        <div class="settings-fields">
+          <label>Display name<input [(ngModel)]="profile.name" name="name" required minlength="2" /></label>
+          <label>Department<input [(ngModel)]="profile.department" name="department" /></label>
+          <label>Role<input [(ngModel)]="profile.role" name="role" /></label>
+        </div>
+      </section>
+
+      <section class="settings-section" aria-labelledby="preferences-heading">
+        <h2 id="preferences-heading">Preferences</h2>
+        <label class="preference-row"><span><strong>Task assignments</strong><small>When a task is assigned to you</small></span><input type="checkbox" [(ngModel)]="preferences.notify_task_assignments" name="notify_task_assignments" /></label>
+        <label class="preference-row"><span><strong>Project updates</strong><small>Changes to projects you follow</small></span><input type="checkbox" [(ngModel)]="preferences.notify_project_updates" name="notify_project_updates" /></label>
+        <label class="preference-row"><span><strong>Upcoming meetings</strong><small>Reminders before scheduled events</small></span><input type="checkbox" [(ngModel)]="preferences.notify_upcoming_meetings" name="notify_upcoming_meetings" /></label>
+        <label class="preference-row"><span><strong>Deadline reminders</strong><small>Tasks approaching their due date</small></span><input type="checkbox" [(ngModel)]="preferences.notify_deadline_reminders" name="notify_deadline_reminders" /></label>
+      </section>
+
+      @if (error()) { <p class="form-error" role="alert">{{ error() }}</p> }
+      @if (saved()) { <p class="form-success" role="status">Settings saved.</p> }
+      <div class="settings-actions"><button class="primary-action" type="submit" [disabled]="saving()">{{ saving() ? 'Saving...' : 'Save settings' }}</button></div>
+    </form>
+  }
+</div>
