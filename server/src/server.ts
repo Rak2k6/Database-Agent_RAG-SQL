@@ -6,22 +6,38 @@ import rateLimit from 'express-rate-limit';
 import { OAuth2Client } from 'google-auth-library';
 import helmet from 'helmet';
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
-import { database, findUserById, toPublicUser, UserRow, logActivity, createNotification } from './db.js';
 import { z } from 'zod';
 import { answerDatabaseQuestion, isDatabaseQuestion } from './ai/databaseQuery.js';
+
+// ── Domain DB modules ─────────────────────────────────────────────────────────
+import * as Auth from './db/auth.js';
+import * as Projects from './db/projects.js';
+import * as Tasks from './db/tasks.js';
+import * as Calendar from './db/calendar.js';
+import * as Documents from './db/documents.js';
+import * as Team from './db/team.js';
+import * as Notifications from './db/notifications.js';
+import * as Dashboard from './db/dashboard.js';
+import * as Settings from './db/settings.js';
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 const sessionCookie = 'northstar_session';
 const googleClientId = process.env.GOOGLE_CLIENT_ID ?? '';
 const googleClient = new OAuth2Client(googleClientId || undefined);
-const allowedOrigins = (process.env.WEB_ORIGIN ?? 'http://localhost:4200').split(',').map((origin) => origin.trim());
+const allowedOrigins = (process.env.WEB_ORIGIN ?? 'http://localhost:4200').split(',').map((o) => o.trim());
 const isProduction = process.env.NODE_ENV === 'production';
 const isLocalDevelopmentOrigin = (origin: string): boolean =>
   !isProduction && /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
 const resetEmailMode = process.env.RESET_EMAIL_MODE ?? 'mock';
 const allowedEmailDomain = (process.env.ALLOWED_EMAIL_DOMAIN ?? 'northstarai.com').toLowerCase();
 
-const emailSchema = z.string().trim().email().max(254).transform((email) => email.toLowerCase())
-  .refine((email) => email.endsWith(`@${allowedEmailDomain}`), {
+// ── Zod schemas ───────────────────────────────────────────────────────────────
+
+const emailSchema = z
+  .string().trim().email().max(254)
+  .transform((e) => e.toLowerCase())
+  .refine((e) => e.endsWith(`@${allowedEmailDomain}`), {
     message: `Only corporate emails ending with @${allowedEmailDomain} are allowed to register or sign in.`,
   });
 const passwordSchema = z.string().min(8).max(128);
@@ -31,39 +47,10 @@ const googleSchema = z.object({ credential: z.string().min(20).max(10000) });
 const forgotSchema = z.object({ email: emailSchema });
 const resetSchema = z.object({ token: z.string().min(20).max(256), password: passwordSchema });
 
-function issueSession(res: Response, user: UserRow, rememberMe = false): void {
-  const maxAgeSeconds = rememberMe ? 60 * 60 * 24 * 30 : 60 * 60 * 12;
-  const token = randomBytes(32).toString('base64url');
-  const now = Date.now();
-  database.prepare('INSERT INTO sessions (token_hash, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)')
-    .run(hashResetToken(token), user.id, now + maxAgeSeconds * 1000, now);
-  res.cookie(sessionCookie, token, {
-    httpOnly: true,
-    secure: isProduction,
-    sameSite: 'lax',
-    path: '/',
-    maxAge: maxAgeSeconds * 1000,
-  });
-}
+// ── Utilities ─────────────────────────────────────────────────────────────────
 
-function requireUser(req: Request, res: Response, next: NextFunction): void {
-  const token = req.cookies?.[sessionCookie] as string | undefined;
-  if (!token) {
-    res.status(401).json({ error: { code: 'UNAUTHENTICATED', message: 'Please sign in to continue.' } });
-    return;
-  }
-
-  const session = database.prepare('SELECT user_id FROM sessions WHERE token_hash = ? AND expires_at > ?')
-    .get(hashResetToken(token), Date.now()) as { user_id: string } | undefined;
-  const user = session ? findUserById(session.user_id) : undefined;
-  if (!user) {
-    database.prepare('DELETE FROM sessions WHERE token_hash = ?').run(hashResetToken(token));
-    res.clearCookie(sessionCookie, { httpOnly: true, secure: isProduction, sameSite: 'lax', path: '/' });
-    res.status(401).json({ error: { code: 'UNAUTHENTICATED', message: 'Your session has expired. Please sign in again.' } });
-    return;
-  }
-  res.locals.user = user;
-  next();
+function hashToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
 }
 
 function parse<T>(schema: z.ZodType<T>, body: unknown, res: Response): T | undefined {
@@ -75,9 +62,51 @@ function parse<T>(schema: z.ZodType<T>, body: unknown, res: Response): T | undef
   return result.data;
 }
 
-function hashResetToken(token: string): string {
-  return createHash('sha256').update(token).digest('hex');
+/** Safely extract a single string from an Express route/query param. */
+function param(value: string | string[] | undefined): string {
+  return Array.isArray(value) ? value[0]! : (value ?? '');
 }
+
+async function issueSession(res: Response, userId: string, rememberMe = false): Promise<void> {
+  const maxAgeSeconds = rememberMe ? 60 * 60 * 24 * 30 : 60 * 60 * 12;
+  const token = randomBytes(32).toString('base64url');
+  const now = Date.now();
+  await Auth.createSession(hashToken(token), userId, now + maxAgeSeconds * 1000);
+  res.cookie(sessionCookie, token, {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: maxAgeSeconds * 1000,
+  });
+}
+
+// ── Auth middleware ───────────────────────────────────────────────────────────
+
+async function requireUser(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const token = req.cookies?.[sessionCookie] as string | undefined;
+    if (!token) {
+      res.status(401).json({ error: { code: 'UNAUTHENTICATED', message: 'Please sign in to continue.' } });
+      return;
+    }
+
+    const session = await Auth.validateSession(hashToken(token), Date.now());
+    const user = session ? await Auth.findUserById(session.user_id) : undefined;
+    if (!user) {
+      await Auth.deleteSession(hashToken(token));
+      res.clearCookie(sessionCookie, { httpOnly: true, secure: isProduction, sameSite: 'lax', path: '/' });
+      res.status(401).json({ error: { code: 'UNAUTHENTICATED', message: 'Your session has expired. Please sign in again.' } });
+      return;
+    }
+    res.locals.user = user;
+    next();
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 export function createApp(): express.Express {
   const app = express();
@@ -95,64 +124,52 @@ export function createApp(): express.Express {
 
   app.use('/api/auth', rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: 'draft-8', legacyHeaders: false }));
 
+  // ── Health / config ──────────────────────────────────────────────────────
+
   app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
   app.get('/api/config', (_req, res) => res.json({ googleClientId }));
 
-  // --- AI API ---
+  // ── AI API ───────────────────────────────────────────────────────────────
+
   app.post('/api/ai/chat', requireUser, async (req, res, next) => {
     try {
-      const message = typeof req.body?.message === 'string'
-        ? req.body.message.trim()
-        : '';
-
+      const message = typeof req.body?.message === 'string' ? req.body.message.trim() : '';
       if (!message || message.length > 4000) {
-        res.status(400).json({
-          error: {
-            code: 'INVALID_MESSAGE',
-            message: 'Message must be between 1 and 4000 characters.',
-          },
-        });
+        res.status(400).json({ error: { code: 'INVALID_MESSAGE', message: 'Message must be between 1 and 4000 characters.' } });
         return;
       }
-
       if (isDatabaseQuestion(message)) {
         const result = await answerDatabaseQuestion(message);
         res.json({ answer: result.answer, source: 'database' });
         return;
       }
-
       const { chatWithOllama } = await import('./ai/ollama.js');
       const answer = await chatWithOllama(message);
       res.json({ answer });
     } catch (error) {
       console.error('AI chat request failed:', error);
-      res.status(500).json({
-        error: {
-          code: 'AI_CHAT_FAILED',
-          message: 'I could not complete that request. Please try again.',
-        },
-      });
+      res.status(500).json({ error: { code: 'AI_CHAT_FAILED', message: 'I could not complete that request. Please try again.' } });
     }
   });
+
+  // ── Auth routes ──────────────────────────────────────────────────────────
 
   app.post('/api/auth/signup', async (req, res, next) => {
     try {
       const input = parse(signupSchema, req.body, res);
       if (!input) return;
-      const existing = database.prepare('SELECT id FROM users WHERE email = ? COLLATE NOCASE').get(input.email);
-      if (existing) {
+
+      if (await Auth.checkEmailExists(input.email)) {
         res.status(409).json({ error: { code: 'EMAIL_REGISTERED', message: 'An account with this email already exists.' } });
         return;
       }
 
-      const now = new Date().toISOString();
       const userId = randomUUID();
       const passwordHash = await bcrypt.hash(input.password, 12);
-      database.prepare(`INSERT INTO users (id, name, email, password_hash, auth_provider, created_at, updated_at)
-        VALUES (?, ?, ?, ?, 'local', ?, ?)`).run(userId, input.name, input.email, passwordHash, now, now);
-      const user = findUserById(userId)!;
-      issueSession(res, user);
-      res.status(201).json({ user: toPublicUser(user) });
+      await Auth.createLocalUser(userId, input.name, input.email, passwordHash);
+      const user = await Auth.findUserById(userId);
+      await issueSession(res, userId);
+      res.status(201).json({ user: Auth.toPublicUser(user!) });
     } catch (error) {
       next(error);
     }
@@ -162,14 +179,15 @@ export function createApp(): express.Express {
     try {
       const input = parse(loginSchema, req.body, res);
       if (!input) return;
-      const user = database.prepare('SELECT * FROM users WHERE email = ? COLLATE NOCASE').get(input.email) as UserRow | undefined;
+
+      const user = await Auth.findUserByEmail(input.email);
       const passwordMatches = user?.password_hash ? await bcrypt.compare(input.password, user.password_hash) : false;
       if (!user || !passwordMatches) {
         res.status(401).json({ error: { code: 'INVALID_CREDENTIALS', message: 'The email or password you entered is incorrect.' } });
         return;
       }
-      issueSession(res, user, input.rememberMe);
-      res.json({ user: toPublicUser(user) });
+      await issueSession(res, user.id, input.rememberMe);
+      res.json({ user: Auth.toPublicUser(user) });
     } catch (error) {
       next(error);
     }
@@ -196,23 +214,22 @@ export function createApp(): express.Express {
         res.status(403).json({ error: { code: 'INVALID_EMAIL_DOMAIN', message: `Only accounts with @${allowedEmailDomain} email addresses can sign in.` } });
         return;
       }
-      let user = database.prepare('SELECT * FROM users WHERE email = ? COLLATE NOCASE').get(email) as UserRow | undefined;
-      const now = new Date().toISOString();
+
+      let user = await Auth.findUserByEmail(email);
       if (!user) {
         const id = randomUUID();
-        database.prepare(`INSERT INTO users (id, name, email, auth_provider, google_id, profile_image, created_at, updated_at)
-          VALUES (?, ?, ?, 'google', ?, ?, ?, ?)`).run(id, profile.name ?? email, email, profile.sub, profile.picture ?? null, now, now);
-        user = findUserById(id)!;
+        await Auth.createGoogleUser(id, profile.name ?? email, email, profile.sub, profile.picture ?? null);
+        user = await Auth.findUserById(id);
       } else if (!user.google_id) {
-        database.prepare('UPDATE users SET google_id = ?, updated_at = ? WHERE id = ?').run(profile.sub, now, user.id);
-        user = findUserById(user.id)!;
+        await Auth.linkGoogleId(user.id, profile.sub);
+        user = await Auth.findUserById(user.id);
       } else if (user.google_id !== profile.sub) {
         res.status(409).json({ error: { code: 'GOOGLE_ACCOUNT_CONFLICT', message: 'This email is linked to a different Google account.' } });
         return;
       }
 
-      issueSession(res, user);
-      res.json({ user: toPublicUser(user) });
+      await issueSession(res, user!.id);
+      res.json({ user: Auth.toPublicUser(user!) });
     } catch (error) {
       if (error instanceof Error && error.name === 'Error') {
         res.status(401).json({ error: { code: 'GOOGLE_VERIFICATION_FAILED', message: 'Google sign-in could not be verified. Please try again.' } });
@@ -222,59 +239,64 @@ export function createApp(): express.Express {
     }
   });
 
-  app.post('/api/auth/forgot-password', (req, res) => {
-    const input = parse(forgotSchema, req.body, res);
-    if (!input) return;
-    const user = database.prepare('SELECT id FROM users WHERE email = ? COLLATE NOCASE').get(input.email) as { id: string } | undefined;
+  app.post('/api/auth/forgot-password', async (req, res, next) => {
+    try {
+      const input = parse(forgotSchema, req.body, res);
+      if (!input) return;
 
-    if (resetEmailMode !== 'mock') {
-      res.status(503).json({ error: { code: 'EMAIL_DELIVERY_NOT_CONFIGURED', message: 'Password reset email delivery is not available.' } });
-      return;
+      if (resetEmailMode !== 'mock') {
+        res.status(503).json({ error: { code: 'EMAIL_DELIVERY_NOT_CONFIGURED', message: 'Password reset email delivery is not available.' } });
+        return;
+      }
+
+      const user = await Auth.findUserByEmail(input.email);
+      if (user) {
+        const token = randomBytes(32).toString('base64url');
+        const tokenHash = hashToken(token);
+        const expiresAt = Date.now() + 60 * 60 * 1000;
+        await Auth.insertResetToken(tokenHash, user.id, expiresAt);
+        const resetUrl = `${process.env.WEB_ORIGIN?.split(',')[0] ?? 'http://localhost:4200'}/reset-password/${token}`;
+        res.json({ message: 'Demo reset link created. No email was sent.', delivery: 'mock', resetUrl });
+        return;
+      }
+
+      res.json({ message: 'If that address has an account, a reset link will be sent.' });
+    } catch (error) {
+      next(error);
     }
-
-    if (user) {
-      const token = randomBytes(32).toString('base64url');
-      const tokenHash = hashResetToken(token);
-      const expiresAt = Date.now() + 60 * 60 * 1000;
-      database.prepare('INSERT INTO password_reset_tokens (token_hash, user_id, expires_at) VALUES (?, ?, ?)').run(tokenHash, user.id, expiresAt);
-      const resetUrl = `${process.env.WEB_ORIGIN?.split(',')[0] ?? 'http://localhost:4200'}/reset-password/${token}`;
-      res.json({ message: 'Demo reset link created. No email was sent.', delivery: 'mock', resetUrl });
-      return;
-    }
-
-    res.json({ message: 'If that address has an account, a reset link will be sent.' });
   });
 
   app.post('/api/auth/reset-password', async (req, res, next) => {
     try {
       const input = parse(resetSchema, req.body, res);
       if (!input) return;
-      const tokenHash = hashResetToken(input.token);
-      const tokenRow = database.prepare(`SELECT token_hash, user_id, expires_at, used_at
-        FROM password_reset_tokens WHERE token_hash = ?`).get(tokenHash) as { token_hash: string; user_id: string; expires_at: number; used_at: number | null } | undefined;
+
+      const tokenHash = hashToken(input.token);
+      const tokenRow = await Auth.lookupResetToken(tokenHash);
+
+      // Timing-safe comparison (Node.js side, before calling the procedure)
       const digest = Buffer.from(tokenHash, 'hex');
       const storedDigest = Buffer.from(tokenRow?.token_hash ?? '0'.repeat(64), 'hex');
       const matches = digest.length === storedDigest.length && timingSafeEqual(digest, storedDigest);
+
       if (!tokenRow || !matches || tokenRow.used_at || tokenRow.expires_at < Date.now()) {
         res.status(400).json({ error: { code: 'RESET_TOKEN_INVALID', message: 'This reset link is invalid or has expired. Request a new one.' } });
         return;
       }
 
       const passwordHash = await bcrypt.hash(input.password, 12);
-      const now = new Date().toISOString();
-      const update = database.transaction(() => {
-        const consumed = database.prepare(`UPDATE password_reset_tokens SET used_at = ?
-          WHERE token_hash = ? AND used_at IS NULL AND expires_at > ?`).run(Date.now(), tokenHash, Date.now());
-        if (consumed.changes !== 1) return false;
-        database.prepare('UPDATE users SET password_hash = ?, auth_provider = ?, updated_at = ? WHERE id = ?').run(passwordHash, 'local', now, tokenRow.user_id);
-        database.prepare('DELETE FROM password_reset_tokens WHERE user_id = ? AND token_hash != ?').run(tokenRow.user_id, tokenHash);
-        database.prepare('DELETE FROM sessions WHERE user_id = ?').run(tokenRow.user_id);
-        return true;
-      });
-      if (!update()) {
-        res.status(400).json({ error: { code: 'RESET_TOKEN_INVALID', message: 'This reset link is invalid or has expired. Request a new one.' } });
-        return;
+      try {
+        // Atomically: consume token, update password, delete other tokens, invalidate sessions
+        await Auth.resetUserPassword(tokenHash, passwordHash, Date.now());
+      } catch (procErr) {
+        const msg = procErr instanceof Error ? procErr.message : '';
+        if (msg.includes('RESET_TOKEN_INVALID')) {
+          res.status(400).json({ error: { code: 'RESET_TOKEN_INVALID', message: 'This reset link is invalid or has expired. Request a new one.' } });
+          return;
+        }
+        throw procErr;
       }
+
       res.json({ message: 'Your password has been updated. Please sign in.' });
     } catch (error) {
       next(error);
@@ -282,177 +304,63 @@ export function createApp(): express.Express {
   });
 
   app.get('/api/auth/me', requireUser, (req, res) => {
-    res.json({ user: toPublicUser(res.locals.user as UserRow) });
+    res.json({ user: Auth.toPublicUser(res.locals.user) });
   });
 
-  app.post('/api/auth/logout', (req, res) => {
-    const token = req.cookies?.[sessionCookie] as string | undefined;
-    if (token) database.prepare('DELETE FROM sessions WHERE token_hash = ?').run(hashResetToken(token));
-    res.clearCookie(sessionCookie, { httpOnly: true, secure: isProduction, sameSite: 'lax', path: '/' });
-    res.status(204).end();
-  });
-
-  // --- WORKPLACE REST API ---
-
-  // Dashboard API
-  app.get('/api/dashboard', requireUser, (_req, res, next) => {
+  app.post('/api/auth/logout', async (req, res, next) => {
     try {
-      const currentUser = res.locals.user as UserRow;
+      const token = req.cookies?.[sessionCookie] as string | undefined;
+      if (token) await Auth.deleteSession(hashToken(token));
+      res.clearCookie(sessionCookie, { httpOnly: true, secure: isProduction, sameSite: 'lax', path: '/' });
+      res.status(204).end();
+    } catch (error) {
+      next(error);
+    }
+  });
 
-      const activeProjectsCount = (database.prepare("SELECT COUNT(*) as count FROM projects WHERE status = 'ACTIVE'").get() as { count: number }).count;
-      const pendingTasksCount = (database.prepare("SELECT COUNT(*) as count FROM tasks WHERE status IN ('TODO', 'IN_PROGRESS')").get() as { count: number }).count;
-      const completedTasksCount = (database.prepare("SELECT COUNT(*) as count FROM tasks WHERE status = 'COMPLETED'").get() as { count: number }).count;
-      const teamMembersCount = (database.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number }).count;
-      const upcomingMeetingsCount = (database.prepare("SELECT COUNT(*) as count FROM calendar_events WHERE event_type = 'MEETING'").get() as { count: number }).count;
+  // ── Dashboard ────────────────────────────────────────────────────────────
 
-      const metrics = {
-        activeProjects: activeProjectsCount,
-        pendingTasks: pendingTasksCount,
-        completedTasks: completedTasksCount,
-        teamMembers: teamMembersCount,
-        upcomingMeetings: upcomingMeetingsCount,
-      };
+  app.get('/api/dashboard', requireUser, async (_req, res, next) => {
+    try {
+      const currentUser = res.locals.user as import('./db/types.js').UserRow;
+      const data = await Dashboard.getDashboardData(currentUser.id);
 
-      // Top tasks for user or team
-      const tasks = database.prepare(`
-        SELECT t.*, p.name as project, u.name as assigned_user_name
-        FROM tasks t
-        JOIN projects p ON t.project_id = p.id
-        LEFT JOIN users u ON t.assigned_to = u.id
-        ORDER BY CASE t.priority WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 ELSE 3 END, t.due_date ASC
-        LIMIT 6
-      `).all().map((row: any) => ({
-        id: row.id,
-        title: row.title,
-        project: row.project,
-        priority: row.priority === 'HIGH' ? 'High' : row.priority === 'MEDIUM' ? 'Medium' : 'Low',
-        dueDate: row.due_date,
-        status: row.status === 'IN_PROGRESS' ? 'In Progress' : row.status === 'COMPLETED' ? 'Completed' : 'To Do',
-        assignedTo: row.assigned_user_name ?? 'Unassigned',
-      }));
-
-      // Active projects with progress
-      const projects = database.prepare(`
-        SELECT p.*,
-          (SELECT COUNT(*) FROM tasks WHERE project_id = p.id) as total_tasks,
-          (SELECT COUNT(*) FROM tasks WHERE project_id = p.id AND status = 'COMPLETED') as completed_tasks
-        FROM projects p
-        WHERE p.status = 'ACTIVE'
-        ORDER BY p.updated_at DESC
-        LIMIT 4
-      `).all().map((p: any, idx: number) => {
-        const total = p.total_tasks || 1;
-        const comp = p.completed_tasks || 0;
-        const progress = Math.round((comp / total) * 100);
-        const tones = ['green', 'teal', 'orange', 'blue'];
-        const memberInitials = database.prepare(`
-          SELECT u.name FROM project_members pm JOIN users u ON pm.user_id = u.id WHERE pm.project_id = ? LIMIT 4
-        `).all(p.id).map((u: any) => u.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase());
-
-        return {
-          id: p.id,
-          name: p.name,
-          description: p.description,
-          progress,
-          deadline: p.due_date,
-          status: p.status === 'ACTIVE' ? 'On track' : p.status,
-          initials: memberInitials.length ? memberInitials : ['NS'],
-          tone: tones[idx % tones.length],
-        };
-      });
-
-      // Schedule
-      const schedule = database.prepare(`
-        SELECT e.*, p.name as project_name
-        FROM calendar_events e
-        LEFT JOIN projects p ON e.project_id = p.id
-        ORDER BY e.start_time ASC
-        LIMIT 5
-      `).all().map((e: any) => ({
-        id: e.id,
-        time: new Date(e.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        title: e.title,
-        detail: e.project_name ? `${e.project_name} · ${e.description}` : e.description,
-        kind: e.event_type.toLowerCase(),
-      }));
-
-      // Activity
-      const activity = database.prepare(`
-        SELECT a.*, u.name as person_name, u.profile_image
-        FROM activities a
-        JOIN users u ON a.user_id = u.id
-        ORDER BY a.created_at DESC
-        LIMIT 6
-      `).all().map((a: any, idx: number) => {
-        const tones = ['orange', 'teal', 'blue', 'green'];
-        const initials = a.person_name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase();
-        return {
-          id: a.id,
-          initials,
-          person: a.person_name,
-          action: a.action,
-          subject: a.subject,
-          time: new Date(a.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          tone: tones[idx % tones.length],
-        };
-      });
-
-      // Notifications
-      const notifications = database.prepare(`
-        SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 10
-      `).all(currentUser.id);
+      // Shape the response to match the existing Angular contract
+      const metrics = data.metrics as Record<string, number>;
 
       res.json({
-        user: toPublicUser(currentUser),
-        metrics,
-        tasks,
-        projects,
-        schedule,
-        activity,
-        notifications,
+        user: Auth.toPublicUser(currentUser),
+        metrics: {
+          activeProjects:   metrics['activeProjects']   ?? metrics['active_projects']   ?? 0,
+          pendingTasks:     (metrics['inProgressTasks'] ?? 0) + (metrics['todo'] ?? 0) + (metrics['totalTasks'] ? 0 : 0),
+          completedTasks:   metrics['completedTasks']   ?? metrics['completed_tasks']   ?? 0,
+          teamMembers:      metrics['teamMembers']       ?? metrics['team_members']       ?? 0,
+          upcomingMeetings: metrics['upcomingEvents']    ?? metrics['upcoming_events']    ?? 0,
+        },
+        tasks: data.topTasks,
+        projects: data.activeProjects,
+        schedule: data.schedule,
+        activity: data.activity,
+        notifications: data.notifications,
       });
     } catch (error) {
       next(error);
     }
   });
 
-  // Projects API
-  app.get('/api/projects', requireUser, (req, res, next) => {
+  // ── Projects ─────────────────────────────────────────────────────────────
+
+  app.get('/api/projects', requireUser, async (req, res, next) => {
     try {
-      const search = (req.query.search as string ?? '').trim().toLowerCase();
-      const statusFilter = (req.query.status as string ?? '').trim();
+      const search = (req.query.search as string ?? '').trim() || undefined;
+      const statusFilter = (req.query.status as string ?? '').trim().toUpperCase() || undefined;
 
-      let query = `
-        SELECT p.*, u.name as creator_name,
-          (SELECT COUNT(*) FROM tasks WHERE project_id = p.id) as total_tasks,
-          (SELECT COUNT(*) FROM tasks WHERE project_id = p.id AND status = 'COMPLETED') as completed_tasks
-        FROM projects p
-        JOIN users u ON p.created_by = u.id
-        WHERE 1=1
-      `;
-      const params: any[] = [];
+      const rows = await Projects.listProjects(search, statusFilter);
 
-      if (search) {
-        query += ` AND (LOWER(p.name) LIKE ? OR LOWER(p.description) LIKE ?)`;
-        params.push(`%${search}%`, `%${search}%`);
-      }
-      if (statusFilter) {
-        query += ` AND p.status = ?`;
-        params.push(statusFilter.toUpperCase());
-      }
-      query += ` ORDER BY p.created_at DESC`;
-
-      const projects = database.prepare(query).all(...params).map((p: any) => {
-        const total = p.total_tasks || 0;
-        const comp = p.completed_tasks || 0;
-        const progress = total > 0 ? Math.round((comp / total) * 100) : 0;
-        const members = database.prepare(`
-          SELECT u.id, u.name, u.email, pm.role
-          FROM project_members pm
-          JOIN users u ON pm.user_id = u.id
-          WHERE pm.project_id = ?
-        `).all(p.id);
-
+      const projects = await Promise.all(rows.map(async (p) => {
+        const members = await Projects.getProjectMembers(p.id);
+        const total = parseInt(p.total_tasks as unknown as string, 10) || 0;
+        const comp  = parseInt(p.completed_tasks as unknown as string, 10) || 0;
         return {
           id: p.id,
           name: p.name,
@@ -461,12 +369,18 @@ export function createApp(): express.Express {
           startDate: p.start_date,
           dueDate: p.due_date,
           createdBy: p.creator_name,
-          progress,
+          progress: p.progress,
           totalTasks: total,
           completedTasks: comp,
-          members,
+          members: members.map((m) => ({
+            id: m.user_id,
+            name: m.user_name,
+            email: null,
+            profile_image: m.profile_image,
+            role: m.member_role,
+          })),
         };
-      });
+      }));
 
       res.json({ projects });
     } catch (error) {
@@ -482,23 +396,15 @@ export function createApp(): express.Express {
     due_date: z.string().min(8),
   });
 
-  app.post('/api/projects', requireUser, (req, res, next) => {
+  app.post('/api/projects', requireUser, async (req, res, next) => {
     try {
       const input = parse(createProjectSchema, req.body, res);
       if (!input) return;
-      const currentUser = res.locals.user as UserRow;
+      const currentUser = res.locals.user as import('./db/types.js').UserRow;
       const id = 'proj_' + randomUUID().slice(0, 8);
-      const now = new Date().toISOString();
 
-      database.prepare(`
-        INSERT INTO projects (id, name, description, status, start_date, due_date, created_by, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(id, input.name, input.description, input.status, input.start_date, input.due_date, currentUser.id, now, now);
-
-      database.prepare(`INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'Owner')`).run(id, currentUser.id);
-
-      logActivity(currentUser.id, 'created a new project', 'project', id, input.name);
-      createNotification(currentUser.id, 'Project Created', `Project "${input.name}" has been created successfully.`, 'project');
+      // Atomically creates project + member + activity + notification
+      await Projects.createProject(id, input.name, currentUser.id, input.status, input.start_date, input.due_date, input.description);
 
       res.status(201).json({ id, message: 'Project created successfully.' });
     } catch (error) {
@@ -506,39 +412,37 @@ export function createApp(): express.Express {
     }
   });
 
-  app.get('/api/projects/:id', requireUser, (req, res, next) => {
+  app.get('/api/projects/:id', requireUser, async (req, res, next) => {
     try {
-      const p: any = database.prepare(`
-        SELECT p.*, u.name as creator_name
-        FROM projects p
-        JOIN users u ON p.created_by = u.id
-        WHERE p.id = ?
-      `).get(req.params.id);
-
-      if (!p) {
+      const projectId = param(req.params['id']);
+      const detail = await Projects.getProjectDetail(projectId);
+      if (!detail) {
         res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Project not found.' } });
         return;
       }
-
-      const tasks = database.prepare(`
-        SELECT t.*, u.name as assigned_user_name FROM tasks t LEFT JOIN users u ON t.assigned_to = u.id WHERE t.project_id = ?
-      `).all(p.id);
-      const members = database.prepare(`
-        SELECT u.id, u.name, u.email, u.profile_image, pm.role FROM project_members pm JOIN users u ON pm.user_id = u.id WHERE pm.project_id = ?
-      `).all(p.id);
-
-      const totalTasks = tasks.length;
-      const completedTasks = tasks.filter((t: any) => t.status === 'COMPLETED').length;
-      const progress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+      const members = await Projects.getProjectMembers(projectId);
+      const tasks = await Tasks.listTasks({ projectId });
 
       res.json({
         project: {
-          ...p,
-          progress,
-          totalTasks,
-          completedTasks,
-          members,
-          tasks,
+          ...detail,
+          members: members.map((m) => ({
+            id: m.user_id,
+            name: m.user_name,
+            email: null,
+            profile_image: m.profile_image,
+            role: m.member_role,
+          })),
+          tasks: tasks.map((t) => ({
+            id: t.id,
+            title: t.title,
+            description: t.description,
+            status: t.status,
+            priority: t.priority,
+            dueDate: t.due_date,
+            assignedTo: t.assigned_to_name ?? 'Unassigned',
+            assignedToId: t.assigned_to_id,
+          })),
         },
       });
     } catch (error) {
@@ -546,115 +450,72 @@ export function createApp(): express.Express {
     }
   });
 
-  app.put('/api/projects/:id', requireUser, (req, res, next) => {
+  app.put('/api/projects/:id', requireUser, async (req, res, next) => {
     try {
       const input = parse(createProjectSchema.partial(), req.body, res);
       if (!input) return;
-      const currentUser = res.locals.user as UserRow;
-      const now = new Date().toISOString();
+      const currentUser = res.locals.user as import('./db/types.js').UserRow;
 
-      const existing = database.prepare('SELECT id, name FROM projects WHERE id = ?').get(req.params.id) as any;
-      if (!existing) {
-        res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Project not found.' } });
-        return;
+      try {
+        await Projects.updateProject(param(req.params['id']), currentUser.id, input);
+      } catch (procErr) {
+        const msg = procErr instanceof Error ? procErr.message : '';
+        if (msg.includes('NOT_FOUND')) {
+          res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Project not found.' } });
+          return;
+        }
+        throw procErr;
       }
 
-      database.prepare(`
-        UPDATE projects SET
-          name = COALESCE(?, name),
-          description = COALESCE(?, description),
-          status = COALESCE(?, status),
-          start_date = COALESCE(?, start_date),
-          due_date = COALESCE(?, due_date),
-          updated_at = ?
-        WHERE id = ?
-      `).run(input.name ?? null, input.description ?? null, input.status ?? null, input.start_date ?? null, input.due_date ?? null, now, req.params.id);
-
-      logActivity(currentUser.id, 'updated project', 'project', req.params.id as string, input.name ?? existing.name);
       res.json({ message: 'Project updated.' });
     } catch (error) {
       next(error);
     }
   });
 
-  app.delete('/api/projects/:id', requireUser, (req, res, next) => {
+  app.delete('/api/projects/:id', requireUser, async (req, res, next) => {
     try {
-      const existing = database.prepare('SELECT id, name FROM projects WHERE id = ?').get(req.params.id) as any;
-      if (!existing) {
+      const deleted = await Projects.deleteProject(param(req.params['id']));
+      if (!deleted) {
         res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Project not found.' } });
         return;
       }
-      database.prepare('DELETE FROM projects WHERE id = ?').run(req.params.id);
       res.json({ message: 'Project deleted.' });
     } catch (error) {
       next(error);
     }
   });
 
-  // Tasks API
-  app.get('/api/tasks', requireUser, (req, res, next) => {
+  // ── Tasks ────────────────────────────────────────────────────────────────
+
+  app.get('/api/tasks', requireUser, async (req, res, next) => {
     try {
-      const currentUser = res.locals.user as UserRow;
-      const assignedToFilter = req.query.assigned_to as string | undefined;
-      const projectIdFilter = req.query.project_id as string | undefined;
-      const statusFilter = req.query.status as string | undefined;
-      const priorityFilter = req.query.priority as string | undefined;
-      const search = (req.query.search as string ?? '').trim().toLowerCase();
+      const currentUser = res.locals.user as import('./db/types.js').UserRow;
+      const assignedToRaw = req.query.assigned_to as string | undefined;
+      const assignedTo = assignedToRaw === 'me' ? currentUser.id : assignedToRaw;
 
-      let query = `
-        SELECT t.*, p.name as project_name, u.name as assigned_user_name, creator.name as creator_name
-        FROM tasks t
-        JOIN projects p ON t.project_id = p.id
-        LEFT JOIN users u ON t.assigned_to = u.id
-        JOIN users creator ON t.created_by = creator.id
-        WHERE 1=1
-      `;
-      const params: any[] = [];
+      const rows = await Tasks.listTasks({
+        assignedTo,
+        projectId: req.query.project_id as string | undefined,
+        status:    (req.query.status    as string | undefined)?.toUpperCase(),
+        priority:  (req.query.priority  as string | undefined)?.toUpperCase(),
+        search:    (req.query.search    as string | undefined)?.trim(),
+      });
 
-      if (assignedToFilter === 'me') {
-        query += ` AND t.assigned_to = ?`;
-        params.push(currentUser.id);
-      } else if (assignedToFilter) {
-        query += ` AND t.assigned_to = ?`;
-        params.push(assignedToFilter);
-      }
-
-      if (projectIdFilter) {
-        query += ` AND t.project_id = ?`;
-        params.push(projectIdFilter);
-      }
-
-      if (statusFilter) {
-        query += ` AND t.status = ?`;
-        params.push(statusFilter.toUpperCase());
-      }
-
-      if (priorityFilter) {
-        query += ` AND t.priority = ?`;
-        params.push(priorityFilter.toUpperCase());
-      }
-
-      if (search) {
-        query += ` AND (LOWER(t.title) LIKE ? OR LOWER(t.description) LIKE ?)`;
-        params.push(`%${search}%`, `%${search}%`);
-      }
-
-      query += ` ORDER BY t.due_date ASC`;
-
-      const tasks = database.prepare(query).all(...params).map((t: any) => ({
-        id: t.id,
-        title: t.title,
+      const tasks = rows.map((t) => ({
+        id:          t.id,
+        title:       t.title,
         description: t.description,
-        projectId: t.project_id,
-        project: t.project_name,
-        assignedToId: t.assigned_to,
-        assignedTo: t.assigned_user_name ?? 'Unassigned',
-        createdBy: t.creator_name,
-        priority: t.priority,
-        status: t.status,
-        dueDate: t.due_date,
+        projectId:   t.project_id,
+        project:     t.project_name,
+        assignedToId: t.assigned_to_id,
+        assignedTo:  t.assigned_to_name ?? 'Unassigned',
+        createdBy:   t.creator_name,
+        priority:    t.priority,
+        status:      t.status,
+        dueDate:     t.due_date,
         completedAt: t.completed_at,
-        isOverdue: t.status !== 'COMPLETED' && new Date(t.due_date).getTime() < Date.now(),
+        isOverdue:   t.is_overdue,
       }));
 
       res.json({ tasks });
@@ -664,36 +525,28 @@ export function createApp(): express.Express {
   });
 
   const createTaskSchema = z.object({
-    title: z.string().trim().min(2).max(200),
+    title:       z.string().trim().min(2).max(200),
     description: z.string().trim().max(1000).optional().default(''),
-    project_id: z.string().min(1),
+    project_id:  z.string().min(1),
     assigned_to: z.string().optional().nullable(),
-    priority: z.enum(['HIGH', 'MEDIUM', 'LOW']).default('MEDIUM'),
-    status: z.enum(['TODO', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']).default('TODO'),
-    due_date: z.string().min(8),
+    priority:    z.enum(['HIGH', 'MEDIUM', 'LOW']).default('MEDIUM'),
+    status:      z.enum(['TODO', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']).default('TODO'),
+    due_date:    z.string().min(8),
   });
 
-  app.post('/api/tasks', requireUser, (req, res, next) => {
+  app.post('/api/tasks', requireUser, async (req, res, next) => {
     try {
       const input = parse(createTaskSchema, req.body, res);
       if (!input) return;
-      const currentUser = res.locals.user as UserRow;
+      const currentUser = res.locals.user as import('./db/types.js').UserRow;
       const id = 'task_' + randomUUID().slice(0, 8);
-      const now = new Date().toISOString();
-      const completedAt = input.status === 'COMPLETED' ? now : null;
 
-      const project = database.prepare('SELECT name FROM projects WHERE id = ?').get(input.project_id) as any;
-
-      database.prepare(`
-        INSERT INTO tasks (id, title, description, project_id, assigned_to, created_by, priority, status, due_date, created_at, updated_at, completed_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(id, input.title, input.description, input.project_id, input.assigned_to ?? null, currentUser.id, input.priority, input.status, input.due_date, now, now, completedAt);
-
-      logActivity(currentUser.id, 'created task', 'task', id, `${input.title} (${project?.name ?? 'Project'})`);
-
-      if (input.assigned_to && input.assigned_to !== currentUser.id) {
-        createNotification(input.assigned_to, 'New Task Assigned', `${currentUser.name} assigned you "${input.title}"`, 'task');
-      }
+      // Atomically creates task + activity + conditional notification
+      await Tasks.createTask(
+        id, input.title, input.project_id, currentUser.id,
+        input.priority, input.status, input.due_date,
+        input.description, input.assigned_to ?? null,
+      );
 
       res.status(201).json({ id, message: 'Task created successfully.' });
     } catch (error) {
@@ -701,40 +554,21 @@ export function createApp(): express.Express {
     }
   });
 
-  app.put('/api/tasks/:id', requireUser, (req, res, next) => {
+  app.put('/api/tasks/:id', requireUser, async (req, res, next) => {
     try {
       const input = parse(createTaskSchema.partial(), req.body, res);
       if (!input) return;
-      const currentUser = res.locals.user as UserRow;
-      const now = new Date().toISOString();
+      const currentUser = res.locals.user as import('./db/types.js').UserRow;
 
-      const existing: any = database.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
-      if (!existing) {
-        res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Task not found.' } });
-        return;
-      }
-
-      const nextStatus = input.status ?? existing.status;
-      const completedAt = nextStatus === 'COMPLETED' ? (existing.completed_at ?? now) : null;
-
-      database.prepare(`
-        UPDATE tasks SET
-          title = COALESCE(?, title),
-          description = COALESCE(?, description),
-          project_id = COALESCE(?, project_id),
-          assigned_to = COALESCE(?, assigned_to),
-          priority = COALESCE(?, priority),
-          status = COALESCE(?, status),
-          due_date = COALESCE(?, due_date),
-          updated_at = ?,
-          completed_at = ?
-        WHERE id = ?
-      `).run(input.title ?? null, input.description ?? null, input.project_id ?? null, input.assigned_to ?? null, input.priority ?? null, input.status ?? null, input.due_date ?? null, now, completedAt, req.params.id);
-
-      if (input.status === 'COMPLETED' && existing.status !== 'COMPLETED') {
-        logActivity(currentUser.id, 'completed a task in', 'task', req.params.id as string, input.title ?? existing.title);
-      } else {
-        logActivity(currentUser.id, 'updated task', 'task', req.params.id as string, input.title ?? existing.title);
+      try {
+        await Tasks.updateTask(param(req.params['id']), currentUser.id, input);
+      } catch (procErr) {
+        const msg = procErr instanceof Error ? procErr.message : '';
+        if (msg.includes('NOT_FOUND')) {
+          res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Task not found.' } });
+          return;
+        }
+        throw procErr;
       }
 
       res.json({ message: 'Task updated.' });
@@ -743,55 +577,39 @@ export function createApp(): express.Express {
     }
   });
 
-  app.delete('/api/tasks/:id', requireUser, (req, res, next) => {
+  app.delete('/api/tasks/:id', requireUser, async (req, res, next) => {
     try {
-      const existing = database.prepare('SELECT id FROM tasks WHERE id = ?').get(req.params.id);
-      if (!existing) {
+      const deleted = await Tasks.deleteTask(param(req.params['id']));
+      if (!deleted) {
         res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Task not found.' } });
         return;
       }
-      database.prepare('DELETE FROM tasks WHERE id = ?').run(req.params.id);
       res.json({ message: 'Task deleted.' });
     } catch (error) {
       next(error);
     }
   });
 
-  // Team API
-  app.get('/api/team', requireUser, (req, res, next) => {
+  // ── Team ─────────────────────────────────────────────────────────────────
+
+  app.get('/api/team', requireUser, async (req, res, next) => {
     try {
-      const search = (req.query.search as string ?? '').trim().toLowerCase();
-      const departmentFilter = (req.query.department as string ?? '').trim();
+      const search     = (req.query.search     as string ?? '').trim() || undefined;
+      const department = (req.query.department as string ?? '').trim() || undefined;
 
-      let query = `SELECT * FROM users WHERE 1=1`;
-      const params: any[] = [];
+      const rows = await Team.listTeamMembers(search, department);
 
-      if (search) {
-        query += ` AND (LOWER(name) LIKE ? OR LOWER(email) LIKE ? OR LOWER(role) LIKE ?)`;
-        params.push(`%${search}%`, `%${search}%`, `%${search}%`);
-      }
-      if (departmentFilter) {
-        query += ` AND LOWER(department) = ?`;
-        params.push(departmentFilter.toLowerCase());
-      }
-      query += ` ORDER BY name ASC`;
-
-      const users = database.prepare(query).all(...params).map((u: any) => {
-        const assignedTasksCount = (database.prepare('SELECT COUNT(*) as count FROM tasks WHERE assigned_to = ?').get(u.id) as any).count;
-        const completedTasksCount = (database.prepare("SELECT COUNT(*) as count FROM tasks WHERE assigned_to = ? AND status = 'COMPLETED'").get(u.id) as any).count;
-
-        return {
-          id: u.id,
-          name: u.name,
-          email: u.email,
-          role: u.role ?? 'Member',
-          department: u.department ?? 'Engineering',
-          status: u.status ?? 'Active',
-          profileImage: u.profile_image,
-          assignedTasksCount,
-          completedTasksCount,
-        };
-      });
+      const users = rows.map((u) => ({
+        id:                  u.id,
+        name:                u.name,
+        email:               u.email,
+        role:                u.role ?? 'Member',
+        department:          u.department ?? 'Engineering',
+        status:              u.status ?? 'Active',
+        profileImage:        u.profile_image,
+        assignedTasksCount:  parseInt(u.assigned_tasks_count, 10),
+        completedTasksCount: parseInt(u.completed_tasks_count, 10),
+      }));
 
       res.json({ users });
     } catch (error) {
@@ -800,9 +618,9 @@ export function createApp(): express.Express {
   });
 
   const createTeamSchema = z.object({
-    name: z.string().trim().min(2).max(100),
-    email: emailSchema,
-    role: z.string().trim().min(2).max(100),
+    name:       z.string().trim().min(2).max(100),
+    email:      emailSchema,
+    role:       z.string().trim().min(2).max(100),
     department: z.string().trim().min(2).max(100),
   });
 
@@ -810,20 +628,15 @@ export function createApp(): express.Express {
     try {
       const input = parse(createTeamSchema, req.body, res);
       if (!input) return;
-      const existing = database.prepare('SELECT id FROM users WHERE email = ? COLLATE NOCASE').get(input.email);
-      if (existing) {
+
+      if (await Team.teamEmailExists(input.email)) {
         res.status(409).json({ error: { code: 'EMAIL_REGISTERED', message: 'Team member email already exists.' } });
         return;
       }
 
       const id = 'usr_' + randomUUID().slice(0, 8);
-      const now = new Date().toISOString();
       const defaultPasswordHash = await bcrypt.hash('Northstar123!', 10);
-
-      database.prepare(`
-        INSERT INTO users (id, name, email, password_hash, auth_provider, role, department, status, created_at, updated_at)
-        VALUES (?, ?, ?, ?, 'local', ?, ?, 'Active', ?, ?)
-      `).run(id, input.name, input.email, defaultPasswordHash, input.role, input.department, now, now);
+      await Team.addTeamMember(id, input.name, input.email, defaultPasswordHash, input.role, input.department);
 
       res.status(201).json({ id, message: 'Team member added.' });
     } catch (error) {
@@ -831,27 +644,22 @@ export function createApp(): express.Express {
     }
   });
 
-  // Calendar API
-  app.get('/api/calendar', requireUser, (_req, res, next) => {
-    try {
-      const events = database.prepare(`
-        SELECT e.*, p.name as project_name, u.name as creator_name
-        FROM calendar_events e
-        LEFT JOIN projects p ON e.project_id = p.id
-        JOIN users u ON e.created_by = u.id
-        ORDER BY e.start_time ASC
-      `).all().map((e: any) => ({
-        id: e.id,
-        title: e.title,
-        description: e.description,
-        startTime: e.start_time,
-        endTime: e.end_time,
-        eventType: e.event_type,
-        projectId: e.project_id,
-        project: e.project_name ?? 'General',
-        createdBy: e.creator_name,
-      }));
+  // ── Calendar ─────────────────────────────────────────────────────────────
 
+  app.get('/api/calendar', requireUser, async (_req, res, next) => {
+    try {
+      const rows = await Calendar.listCalendarEvents();
+      const events = rows.map((e) => ({
+        id:          e.id,
+        title:       e.title,
+        description: e.description,
+        startTime:   e.start_time,
+        endTime:     e.end_time,
+        eventType:   e.event_type,
+        projectId:   e.project_id,
+        project:     e.project_name ?? 'General',
+        createdBy:   e.creator_name,
+      }));
       res.json({ events });
     } catch (error) {
       next(error);
@@ -859,74 +667,59 @@ export function createApp(): express.Express {
   });
 
   const createEventSchema = z.object({
-    title: z.string().trim().min(2).max(200),
+    title:       z.string().trim().min(2).max(200),
     description: z.string().trim().max(1000).optional().default(''),
-    start_time: z.string().min(8),
-    end_time: z.string().min(8),
-    event_type: z.enum(['MEETING', 'EVENT', 'DEADLINE', 'REMINDER']).default('MEETING'),
-    project_id: z.string().optional().nullable(),
+    start_time:  z.string().min(8),
+    end_time:    z.string().min(8),
+    event_type:  z.enum(['MEETING', 'EVENT', 'DEADLINE', 'REMINDER']).default('MEETING'),
+    project_id:  z.string().optional().nullable(),
   });
 
-  app.post('/api/calendar', requireUser, (req, res, next) => {
+  app.post('/api/calendar', requireUser, async (req, res, next) => {
     try {
       const input = parse(createEventSchema, req.body, res);
       if (!input) return;
-      const currentUser = res.locals.user as UserRow;
+      const currentUser = res.locals.user as import('./db/types.js').UserRow;
       const id = 'evt_' + randomUUID().slice(0, 8);
-      const now = new Date().toISOString();
 
-      database.prepare(`
-        INSERT INTO calendar_events (id, title, description, start_time, end_time, event_type, created_by, project_id, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(id, input.title, input.description, input.start_time, input.end_time, input.event_type, currentUser.id, input.project_id ?? null, now);
+      await Calendar.createCalendarEvent(
+        id, input.title, input.description,
+        input.start_time, input.end_time, input.event_type,
+        currentUser.id, input.project_id ?? null,
+      );
 
-      logActivity(currentUser.id, 'scheduled a meeting for', 'event', id, input.title);
       res.status(201).json({ id, message: 'Event created.' });
     } catch (error) {
       next(error);
     }
   });
 
-  app.delete('/api/calendar/:id', requireUser, (req, res, next) => {
+  app.delete('/api/calendar/:id', requireUser, async (req, res, next) => {
     try {
-      database.prepare('DELETE FROM calendar_events WHERE id = ?').run(req.params.id);
+      await Calendar.deleteCalendarEvent(param(req.params['id']));
       res.json({ message: 'Event deleted.' });
     } catch (error) {
       next(error);
     }
   });
 
-  // Documents API
-  app.get('/api/documents', requireUser, (req, res, next) => {
+  // ── Documents ────────────────────────────────────────────────────────────
+
+  app.get('/api/documents', requireUser, async (req, res, next) => {
     try {
-      const search = (req.query.search as string ?? '').trim().toLowerCase();
-
-      let query = `
-        SELECT d.*, p.name as project_name, u.name as uploader_name
-        FROM documents d
-        LEFT JOIN projects p ON d.project_id = p.id
-        JOIN users u ON d.uploaded_by = u.id
-        WHERE 1=1
-      `;
-      const params: any[] = [];
-      if (search) {
-        query += ` AND (LOWER(d.name) LIKE ? OR LOWER(d.file_name) LIKE ?)`;
-        params.push(`%${search}%`, `%${search}%`);
-      }
-      query += ` ORDER BY d.created_at DESC`;
-
-      const documents = database.prepare(query).all(...params).map((d: any) => ({
-        id: d.id,
-        name: d.name,
-        fileName: d.file_name,
-        fileType: d.file_type,
-        fileSize: d.file_size,
-        folder: d.folder,
-        project: d.project_name ?? 'General',
+      const search = (req.query.search as string ?? '').trim() || undefined;
+      const rows = await Documents.listDocuments(search);
+      const documents = rows.map((d) => ({
+        id:         d.id,
+        name:       d.name,
+        fileName:   d.file_name,
+        fileType:   d.file_type,
+        fileSize:   parseInt(d.file_size as unknown as string, 10),
+        folder:     d.folder,
+        project:    d.project_name ?? 'General',
         uploadedBy: d.uploader_name,
-        createdAt: d.created_at,
+        createdAt:  d.created_at,
       }));
-
       res.json({ documents });
     } catch (error) {
       next(error);
@@ -934,165 +727,129 @@ export function createApp(): express.Express {
   });
 
   const createDocumentSchema = z.object({
-    name: z.string().trim().min(2).max(200),
-    file_name: z.string().trim().min(1).max(255),
-    file_type: z.string().trim().default('application/pdf'),
-    file_size: z.number().int().positive().default(1024),
-    folder: z.string().trim().default('General'),
+    name:       z.string().trim().min(2).max(200),
+    file_name:  z.string().trim().min(1).max(255),
+    file_type:  z.string().trim().default('application/pdf'),
+    file_size:  z.number().int().positive().default(1024),
+    folder:     z.string().trim().default('General'),
     project_id: z.string().optional().nullable(),
   });
 
-  app.post('/api/documents', requireUser, (req, res, next) => {
+  app.post('/api/documents', requireUser, async (req, res, next) => {
     try {
       const input = parse(createDocumentSchema, req.body, res);
       if (!input) return;
-      const currentUser = res.locals.user as UserRow;
+      const currentUser = res.locals.user as import('./db/types.js').UserRow;
       const id = 'doc_' + randomUUID().slice(0, 8);
-      const now = new Date().toISOString();
 
-      database.prepare(`
-        INSERT INTO documents (id, name, file_name, file_path, file_type, file_size, uploaded_by, project_id, folder, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(id, input.name, input.file_name, `/uploads/${input.file_name}`, input.file_type, input.file_size, currentUser.id, input.project_id ?? null, input.folder, now, now);
+      await Documents.createDocument(
+        id, input.name, input.file_name, input.file_type, input.file_size,
+        currentUser.id, input.project_id ?? null, input.folder,
+      );
 
-      logActivity(currentUser.id, 'uploaded a document to', 'document', id, input.name);
       res.status(201).json({ id, message: 'Document added.' });
     } catch (error) {
       next(error);
     }
   });
 
-  app.delete('/api/documents/:id', requireUser, (req, res, next) => {
+  app.delete('/api/documents/:id', requireUser, async (req, res, next) => {
     try {
-      database.prepare('DELETE FROM documents WHERE id = ?').run(req.params.id);
+      await Documents.deleteDocument(param(req.params['id']));
       res.json({ message: 'Document deleted.' });
     } catch (error) {
       next(error);
     }
   });
 
-  // Reports API
-  app.get('/api/reports', requireUser, (_req, res, next) => {
+  // ── Reports ──────────────────────────────────────────────────────────────
+
+  app.get('/api/reports', requireUser, async (_req, res, next) => {
     try {
-      const taskStats = {
-        total: (database.prepare('SELECT COUNT(*) as c FROM tasks').get() as any).c,
-        completed: (database.prepare("SELECT COUNT(*) as c FROM tasks WHERE status = 'COMPLETED'").get() as any).c,
-        inProgress: (database.prepare("SELECT COUNT(*) as c FROM tasks WHERE status = 'IN_PROGRESS'").get() as any).c,
-        todo: (database.prepare("SELECT COUNT(*) as c FROM tasks WHERE status = 'TODO'").get() as any).c,
-        highPriority: (database.prepare("SELECT COUNT(*) as c FROM tasks WHERE priority = 'HIGH'").get() as any).c,
-      };
-
-      const projectStats = {
-        total: (database.prepare('SELECT COUNT(*) as c FROM projects').get() as any).c,
-        active: (database.prepare("SELECT COUNT(*) as c FROM projects WHERE status = 'ACTIVE'").get() as any).c,
-        completed: (database.prepare("SELECT COUNT(*) as c FROM projects WHERE status = 'COMPLETED'").get() as any).c,
-        planned: (database.prepare("SELECT COUNT(*) as c FROM projects WHERE status = 'PLANNED'").get() as any).c,
-      };
-
-      const teamWorkload = database.prepare(`
-        SELECT u.id, u.name, u.role, u.department,
-          (SELECT COUNT(*) FROM tasks WHERE assigned_to = u.id) as assigned_tasks,
-          (SELECT COUNT(*) FROM tasks WHERE assigned_to = u.id AND status = 'COMPLETED') as completed_tasks
-        FROM users u
-        ORDER BY assigned_tasks DESC
-      `).all();
-
+      const data = await Dashboard.getReportData();
       res.json({
-        taskStats,
-        projectStats,
-        teamWorkload,
+        taskStats:    data.taskStats,
+        projectStats: data.projectStats,
+        teamWorkload: data.teamWorkload,
       });
     } catch (error) {
       next(error);
     }
   });
 
-  // Notifications API
-  app.get('/api/notifications', requireUser, (_req, res, next) => {
-    try {
-      const currentUser = res.locals.user as UserRow;
-      const notifications = database.prepare(`
-        SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 20
-      `).all(currentUser.id);
-      const unreadCount = (database.prepare(`
-        SELECT COUNT(*) as c FROM notifications WHERE user_id = ? AND is_read = 0
-      `).get(currentUser.id) as any).c;
+  // ── Notifications ────────────────────────────────────────────────────────
 
+  app.get('/api/notifications', requireUser, async (_req, res, next) => {
+    try {
+      const currentUser = res.locals.user as import('./db/types.js').UserRow;
+      const [notifications, unreadCount] = await Promise.all([
+        Notifications.getUserNotifications(currentUser.id),
+        Notifications.getUnreadCount(currentUser.id),
+      ]);
       res.json({ notifications, unreadCount });
     } catch (error) {
       next(error);
     }
   });
 
-  app.patch('/api/notifications/read-all', requireUser, (_req, res, next) => {
+  app.patch('/api/notifications/read-all', requireUser, async (_req, res, next) => {
     try {
-      const currentUser = res.locals.user as UserRow;
-      database.prepare('UPDATE notifications SET is_read = 1 WHERE user_id = ?').run(currentUser.id);
+      const currentUser = res.locals.user as import('./db/types.js').UserRow;
+      await Notifications.markAllNotificationsRead(currentUser.id);
       res.json({ message: 'All notifications marked as read.' });
     } catch (error) {
       next(error);
     }
   });
 
-  app.patch('/api/notifications/:id/read', requireUser, (req, res, next) => {
+  app.patch('/api/notifications/:id/read', requireUser, async (req, res, next) => {
     try {
-      database.prepare('UPDATE notifications SET is_read = 1 WHERE id = ?').run(req.params.id);
+      await Notifications.markNotificationRead(param(req.params['id']));
       res.json({ message: 'Notification marked as read.' });
     } catch (error) {
       next(error);
     }
   });
 
-  // Settings API
-  app.get('/api/settings', requireUser, (_req, res, next) => {
+  // ── Settings ─────────────────────────────────────────────────────────────
+
+  app.get('/api/settings', requireUser, async (_req, res, next) => {
     try {
-      const currentUser = res.locals.user as UserRow;
-      let settings = database.prepare('SELECT * FROM user_settings WHERE user_id = ?').get(currentUser.id) as any;
+      const currentUser = res.locals.user as import('./db/types.js').UserRow;
+      let settings = await Settings.getUserSettings(currentUser.id);
+
       if (!settings) {
-        const now = new Date().toISOString();
-        database.prepare(`
-          INSERT INTO user_settings (user_id, theme, notify_task_assignments, notify_project_updates, notify_upcoming_meetings, notify_deadline_reminders, updated_at)
-          VALUES (?, 'light', 1, 1, 1, 1, ?)
-        `).run(currentUser.id, now);
-        settings = database.prepare('SELECT * FROM user_settings WHERE user_id = ?').get(currentUser.id);
+        // Initialise defaults
+        await Settings.upsertUserSettings(currentUser.id, 'light', true, true, true, true);
+        settings = await Settings.getUserSettings(currentUser.id);
       }
 
-      res.json({
-        profile: toPublicUser(currentUser),
-        settings,
-      });
+      res.json({ profile: Auth.toPublicUser(currentUser), settings });
     } catch (error) {
       next(error);
     }
   });
 
-  app.put('/api/settings', requireUser, (req, res, next) => {
+  app.put('/api/settings', requireUser, async (req, res, next) => {
     try {
-      const currentUser = res.locals.user as UserRow;
-      const { name, department, role, profile_image, theme, notify_task_assignments, notify_project_updates, notify_upcoming_meetings, notify_deadline_reminders } = req.body;
-      const now = new Date().toISOString();
+      const currentUser = res.locals.user as import('./db/types.js').UserRow;
+      const {
+        name, department, role, profile_image,
+        theme, notify_task_assignments, notify_project_updates,
+        notify_upcoming_meetings, notify_deadline_reminders,
+      } = req.body;
 
-      database.prepare(`
-        UPDATE users SET
-          name = COALESCE(?, name),
-          department = COALESCE(?, department),
-          role = COALESCE(?, role),
-          profile_image = COALESCE(?, profile_image),
-          updated_at = ?
-        WHERE id = ?
-      `).run(name ?? null, department ?? null, role ?? null, profile_image ?? null, now, currentUser.id);
-
-      database.prepare(`
-        INSERT INTO user_settings (user_id, theme, notify_task_assignments, notify_project_updates, notify_upcoming_meetings, notify_deadline_reminders, updated_at)
-        VALUES (?, COALESCE(?, 'light'), COALESCE(?, 1), COALESCE(?, 1), COALESCE(?, 1), COALESCE(?, 1), ?)
-        ON CONFLICT(user_id) DO UPDATE SET
-          theme = COALESCE(excluded.theme, theme),
-          notify_task_assignments = COALESCE(excluded.notify_task_assignments, notify_task_assignments),
-          notify_project_updates = COALESCE(excluded.notify_project_updates, notify_project_updates),
-          notify_upcoming_meetings = COALESCE(excluded.notify_upcoming_meetings, notify_upcoming_meetings),
-          notify_deadline_reminders = COALESCE(excluded.notify_deadline_reminders, notify_deadline_reminders),
-          updated_at = excluded.updated_at
-      `).run(currentUser.id, theme ?? 'light', notify_task_assignments ?? 1, notify_project_updates ?? 1, notify_upcoming_meetings ?? 1, notify_deadline_reminders ?? 1, now);
+      await Promise.all([
+        Settings.updateUserProfile(currentUser.id, { name, department, role, profile_image }),
+        Settings.upsertUserSettings(
+          currentUser.id,
+          theme ?? 'light',
+          notify_task_assignments ?? true,
+          notify_project_updates  ?? true,
+          notify_upcoming_meetings ?? true,
+          notify_deadline_reminders ?? true,
+        ),
+      ]);
 
       res.json({ message: 'Settings updated.' });
     } catch (error) {
@@ -1100,11 +857,17 @@ export function createApp(): express.Express {
     }
   });
 
-  app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
+  // ── Global error handler ─────────────────────────────────────────────────
 
+  app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
     console.error(error);
     const message = error instanceof Error ? error.message : 'Unexpected server error.';
-    res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: isProduction ? 'Something went wrong. Please try again.' : message } });
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: isProduction ? 'Something went wrong. Please try again.' : message,
+      },
+    });
   });
 
   return app;
