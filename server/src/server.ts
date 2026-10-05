@@ -8,6 +8,7 @@ import helmet from 'helmet';
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { database, findUserById, toPublicUser, UserRow, logActivity, createNotification } from './db.js';
 import { z } from 'zod';
+import { answerDatabaseQuestion, isDatabaseQuestion } from './ai/databaseQuery.js';
 
 const sessionCookie = 'northstar_session';
 const googleClientId = process.env.GOOGLE_CLIENT_ID ?? '';
@@ -96,6 +97,43 @@ export function createApp(): express.Express {
 
   app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
   app.get('/api/config', (_req, res) => res.json({ googleClientId }));
+
+  // --- AI API ---
+  app.post('/api/ai/chat', requireUser, async (req, res, next) => {
+    try {
+      const message = typeof req.body?.message === 'string'
+        ? req.body.message.trim()
+        : '';
+
+      if (!message || message.length > 4000) {
+        res.status(400).json({
+          error: {
+            code: 'INVALID_MESSAGE',
+            message: 'Message must be between 1 and 4000 characters.',
+          },
+        });
+        return;
+      }
+
+      if (isDatabaseQuestion(message)) {
+        const result = await answerDatabaseQuestion(message);
+        res.json({ answer: result.answer, source: 'database' });
+        return;
+      }
+
+      const { chatWithOllama } = await import('./ai/ollama.js');
+      const answer = await chatWithOllama(message);
+      res.json({ answer });
+    } catch (error) {
+      console.error('AI chat request failed:', error);
+      res.status(500).json({
+        error: {
+          code: 'AI_CHAT_FAILED',
+          message: 'I could not complete that request. Please try again.',
+        },
+      });
+    }
+  });
 
   app.post('/api/auth/signup', async (req, res, next) => {
     try {

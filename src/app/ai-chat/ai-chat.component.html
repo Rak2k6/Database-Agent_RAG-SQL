@@ -1,0 +1,92 @@
+<button
+  #launcher
+  class="chat-launcher"
+  type="button"
+  [attr.aria-expanded]="isOpen()"
+  aria-controls="northstar-chat-panel"
+  [attr.aria-label]="isOpen() ? 'Close Northstar AI chat' : 'Open Northstar AI chat'"
+  (click)="togglePanel()">
+  <span aria-hidden="true">✦</span>
+</button>
+
+@if (isOpen()) {
+  <section
+    id="northstar-chat-panel"
+    class="chat-panel"
+    role="dialog"
+    aria-modal="false"
+    aria-label="Northstar AI chat">
+    <header class="chat-header">
+      <span class="chat-brand-mark" aria-hidden="true">✦</span>
+      <div class="chat-brand-copy">
+        <strong>Northstar AI</strong>
+        <span>Workspace assistant</span>
+      </div>
+      <div class="header-actions">
+        <button class="header-icon" type="button" aria-label="Minimize chat" title="Minimize" (click)="closePanel()">−</button>
+        <button class="header-icon close-icon" type="button" aria-label="Close chat" title="Close" (click)="closePanel()">×</button>
+      </div>
+    </header>
+
+    <div #messageList class="message-list" aria-live="polite" aria-relevant="additions text">
+      @for (message of messages(); track message.id) {
+        <article class="message" [class.user-message]="message.role === 'user'">
+          @if (message.role === 'assistant') {
+            <span class="message-mark" aria-hidden="true">✦</span>
+          }
+          <div class="message-content">
+            <span class="message-author">{{ message.role === 'user' ? 'You' : 'Northstar AI' }}</span>
+            <p class="message-bubble">{{ message.content }}</p>
+            @for (source of sourceItems(message); track $index) {
+              <span class="source-label"><i aria-hidden="true"></i>Source · {{ sourceLabel(source) }}</span>
+            }
+          </div>
+        </article>
+      }
+
+      @if (messages().length === 1) {
+        <section class="suggestion-section" aria-label="Suggested questions">
+          <span class="suggestion-heading">TRY ASKING</span>
+          <div class="suggestion-grid">
+            @for (suggestion of suggestions; track suggestion) {
+              <button type="button" class="suggestion-button" [disabled]="sending()" (click)="sendMessage(suggestion)">
+                {{ suggestion }}
+                <span aria-hidden="true">↗</span>
+              </button>
+            }
+          </div>
+        </section>
+      }
+
+      @if (sending()) {
+        <article class="message thinking-message" role="status" aria-label="Northstar AI is thinking">
+          <span class="message-mark" aria-hidden="true">✦</span>
+          <div class="message-content">
+            <span class="message-author">Northstar AI</span>
+            <div class="thinking-bubble">
+              <span>Thinking</span>
+              <i></i><i></i><i></i>
+            </div>
+          </div>
+        </article>
+      }
+    </div>
+
+    <form class="chat-composer" (submit)="$event.preventDefault(); sendMessage()">
+      <label class="visually-hidden" for="northstar-chat-input">Ask Northstar about your workspace</label>
+      <textarea
+        #composer
+        id="northstar-chat-input"
+        name="message"
+        rows="1"
+        [ngModel]="draft()"
+        (ngModelChange)="draft.set($event)"
+        (keydown)="onComposerKeydown($event)"
+        placeholder="Ask about your workspace..."
+        aria-label="Ask Northstar about your workspace"></textarea>
+      <button class="send-button" type="submit" [disabled]="!draft().trim() || sending()" aria-label="Send message" title="Send message">
+        <span aria-hidden="true">➤</span>
+      </button>
+    </form>
+  </section>
+}

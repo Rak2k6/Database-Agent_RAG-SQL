@@ -277,3 +277,156 @@ test('workplace REST endpoints for dashboard, projects, tasks, calendar, documen
   assert.equal((diskDatabase.prepare('SELECT theme FROM user_settings WHERE user_id = ?').get(user.id) as { theme: string }).theme, 'dark');
   diskDatabase.close();
 });
+
+test('read-only SQL guard permits approved SELECTs and rejects writes and private tables', async () => {
+  const { validateReadOnlySql } = await import('./ai/sqlGuard.js');
+  const { executeReadOnlySql } = await import('./ai/sqlExecutor.js');
+
+  const projectSelect = 'SELECT name FROM projects';
+  const memberJoin = `SELECT p.name, u.name
+    FROM projects p
+    JOIN project_members pm ON pm.project_id = p.id
+    JOIN users u ON u.id = pm.user_id`;
+
+  assert.doesNotThrow(() => validateReadOnlySql(projectSelect));
+  assert.doesNotThrow(() => validateReadOnlySql(memberJoin));
+  assert.ok(Array.isArray(executeReadOnlySql(projectSelect)));
+  assert.ok(Array.isArray(executeReadOnlySql(memberJoin)));
+
+  for (const sql of [
+    'DELETE FROM projects',
+    "UPDATE projects SET status = 'COMPLETED'",
+    'DROP TABLE projects',
+    'SELECT name FROM projects; SELECT name FROM projects',
+    'SELECT token_hash FROM sessions',
+    'SELECT token_hash FROM password_reset_tokens',
+    'SELECT p.name FROM projects p, sessions s',
+  ]) {
+    assert.throws(() => validateReadOnlySql(sql), (error: unknown) => error instanceof Error, sql);
+  }
+});
+
+test('database result formatter handles empty results, project lists, and counts', async () => {
+  const { formatDatabaseAnswer } = await import('./ai/resultFormatter.js');
+
+  assert.equal(
+    formatDatabaseAnswer('What are the active projects?', 'SELECT name FROM projects', []),
+    'No matching records were found.',
+  );
+  assert.equal(
+    formatDatabaseAnswer('What are the active projects?', 'SELECT name FROM projects', [
+      { name: 'Platform Refresh' },
+      { name: 'Customer Intelligence' },
+    ]),
+    'There are 2 active projects: Platform Refresh, Customer Intelligence.',
+  );
+  assert.equal(
+    formatDatabaseAnswer('How many active projects are there?', 'SELECT COUNT(*) AS total FROM projects', [{ total: 10 }]),
+    'There are 10 active projects.',
+  );
+  assert.equal(
+    formatDatabaseAnswer('What is the average project size?', 'SELECT AVG(task_count) AS average FROM projects', [{ average: 4.5 }]),
+    'Average: 4.5.',
+  );
+  assert.equal(
+    formatDatabaseAnswer('What is the latest project due date?', 'SELECT MAX(due_date) AS latest FROM projects', [{ latest: '2026-12-01' }]),
+    'Maximum: 2026-12-01.',
+  );
+});
+
+test('database row formatter produces a compact readable table', async () => {
+  const { formatDatabaseAnswer } = await import('./ai/resultFormatter.js');
+
+  assert.equal(
+    formatDatabaseAnswer('Which projects have the most incomplete tasks?', 'SELECT p.name AS project, COUNT(t.id) AS incomplete_tasks FROM projects p JOIN tasks t ON t.project_id = p.id GROUP BY p.name', [
+      { project: 'Platform Refresh', incomplete_tasks: 8 },
+      { project: 'Customer Intelligence', incomplete_tasks: 5 },
+    ]),
+    'Project | Incomplete Tasks\nPlatform Refresh | 8\nCustomer Intelligence | 5',
+  );
+});
+
+test('AI chat routes database questions through one SQL inference and preserves general chat', async () => {
+  const originalFetch = globalThis.fetch;
+  const email = `ai-chat-${randomUUID()}@northstarai.com`;
+  const signupResponse = await originalFetch(`${baseUrl}/api/auth/signup`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name: 'AI Chat Tester', email, password: 'PassWord123!' }),
+  });
+  assert.equal(signupResponse.status, 201);
+  const { user } = await signupResponse.json() as { user: { id: string } };
+  const cookie = signupResponse.headers.get('set-cookie')?.split(';')[0];
+  assert(cookie);
+
+  const projectId = randomUUID();
+  const timestamp = new Date().toISOString();
+  database.prepare(`INSERT INTO projects (id, name, description, status, start_date, due_date, created_by, created_at, updated_at)
+    VALUES (?, ?, '', 'ACTIVE', '2026-10-01', '2026-10-31', ?, ?, ?)`).run(projectId, 'Platform Refresh', user.id, timestamp, timestamp);
+
+  let inferenceCount = 0;
+  let generatedSql = `SELECT name FROM projects WHERE id = '${projectId}' AND status = 'ACTIVE'`;
+  const ollamaPrompts: string[] = [];
+  globalThis.fetch = async (input, init) => {
+    if (String(input).endsWith('/api/chat')) {
+      inferenceCount += 1;
+      const request = JSON.parse(String(init?.body)) as { messages: Array<{ content: string }> };
+      const prompt = request.messages[0].content;
+      ollamaPrompts.push(prompt);
+      const content = prompt.includes('Convert the user\'s question into ONE SQLite SELECT query.')
+        ? generatedSql
+        : 'Hello from local chat.';
+      return new Response(JSON.stringify({ message: { role: 'assistant', content } }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    return originalFetch(input, init);
+  };
+
+  try {
+    const databaseResponse = await originalFetch(`${baseUrl}/api/ai/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ message: 'What are the active projects?' }),
+    });
+    assert.equal(databaseResponse.status, 200);
+    assert.deepEqual(await databaseResponse.json(), {
+      answer: 'There is 1 active project: Platform Refresh.',
+      source: 'database',
+    });
+    assert.equal(inferenceCount, 1);
+
+    inferenceCount = 0;
+    const generalMessage = 'Give me a short greeting.';
+    const generalResponse = await originalFetch(`${baseUrl}/api/ai/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ message: generalMessage }),
+    });
+    assert.equal(generalResponse.status, 200);
+    assert.deepEqual(await generalResponse.json(), { answer: 'Hello from local chat.' });
+    assert.equal(inferenceCount, 1);
+    assert.equal(ollamaPrompts.at(-1), generalMessage);
+
+    inferenceCount = 0;
+    generatedSql = 'DELETE FROM projects';
+    const rejectedResponse = await originalFetch(`${baseUrl}/api/ai/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ message: 'What projects are there?' }),
+    });
+    assert.equal(rejectedResponse.status, 500);
+    assert.deepEqual(await rejectedResponse.json(), {
+      error: {
+        code: 'AI_CHAT_FAILED',
+        message: 'I could not complete that request. Please try again.',
+      },
+    });
+    assert.equal(inferenceCount, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+    database.prepare('DELETE FROM projects WHERE id = ?').run(projectId);
+    database.prepare('DELETE FROM users WHERE id = ?').run(user.id);
+  }
+});
