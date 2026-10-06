@@ -1,37 +1,128 @@
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
+import { readFile } from 'node:fs/promises';
 import { Server } from 'node:http';
+import path from 'node:path';
 import { after, before, test } from 'node:test';
-import DatabaseConnection from 'better-sqlite3';
-import type Database from 'better-sqlite3';
+import pg from 'pg';
+import type { Client, Pool } from 'pg';
 
-process.env.DB_PATH = 'server/data/api-tests.sqlite';
+import 'dotenv/config';
+
+const { Client: PostgreSQLClient } = pg;
+
+process.env.NODE_ENV = 'test';
 process.env.RESET_EMAIL_MODE = 'mock';
 process.env.WEB_ORIGIN = 'http://localhost:4200';
 
 let server: Server;
-let database: Database.Database;
-let databasePath: string;
+let pool: Pool;
+let setupClient: Client;
+let testSchema: string;
 let baseUrl: string;
 
 before(async () => {
-  const [{ createApp }, dbModule] = await Promise.all([
-    import('./server.js'),
-    import('./db.js'),
-  ]);
-  database = dbModule.database;
-  databasePath = dbModule.databasePath;
-  server = createApp().listen(0, '127.0.0.1');
-  await once(server, 'listening');
-  const address = server.address();
-  assert(address && typeof address !== 'string');
-  baseUrl = `http://127.0.0.1:${address.port}`;
+  const connectionString = process.env.PG_URI;
+  if (!connectionString) {
+    throw new Error('PG_URI must point to a PostgreSQL instance for API tests.');
+  }
+
+  setupClient = new PostgreSQLClient({ connectionString });
+  await setupClient.connect();
+  testSchema = `api_test_${randomUUID().replaceAll('-', '')}`;
+  await setupClient.query(`CREATE SCHEMA "${testSchema}"`);
+
+  try {
+    await setupClient.query(`SET search_path TO "${testSchema}", public`);
+    const schemaSql = await readFile(
+      path.resolve(process.cwd(), 'server', 'db', 'postgres', 'schema.sql'),
+      'utf8',
+    );
+    await setupClient.query(schemaSql);
+
+    const routineFiles = [
+      'functions/fn_log_activity.sql',
+      'functions/fn_create_notification.sql',
+      'views/v_task_stats.sql',
+      'views/v_project_stats.sql',
+      'views/v_project_summary.sql',
+      'views/v_recent_activities.sql',
+      'functions/get_project_detail.sql',
+      'functions/get_project_members.sql',
+      'functions/list_projects.sql',
+      'functions/list_tasks.sql',
+      'functions/list_calendar_events.sql',
+      'functions/list_documents.sql',
+      'functions/list_team_members.sql',
+      'functions/get_team_workload.sql',
+      'functions/get_dashboard_data.sql',
+      'procedures/proc_reset_user_password.sql',
+      'procedures/proc_create_project.sql',
+      'procedures/proc_update_project.sql',
+      'procedures/proc_create_task.sql',
+      'procedures/proc_update_task.sql',
+    ];
+    for (const routineFile of routineFiles) {
+      const routineSql = await readFile(
+        path.resolve(process.cwd(), 'server', 'database', routineFile),
+        'utf8',
+      );
+      await setupClient.query(routineSql);
+    }
+
+    const testConnection = new URL(connectionString);
+    const existingOptions = testConnection.searchParams.get('options');
+    testConnection.searchParams.set(
+      'options',
+      [existingOptions, `-csearch_path=${testSchema},public`].filter(Boolean).join(' '),
+    );
+    process.env.PG_URI = testConnection.toString();
+
+    const [{ createApp }, poolModule] = await Promise.all([
+      import('./server.js'),
+      import('./db/pool.js'),
+    ]);
+    pool = poolModule.pool;
+    server = createApp().listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    const address = server.address();
+    assert(address && typeof address !== 'string');
+    baseUrl = `http://127.0.0.1:${address.port}`;
+  } catch (error) {
+    await setupClient.query(`DROP SCHEMA IF EXISTS "${testSchema}" CASCADE`);
+    await setupClient.end();
+    throw error;
+  }
 });
 
 after(async () => {
   if (server) await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
-  database.close();
+  if (pool) await pool.end();
+  if (testSchema) await setupClient.query(`DROP SCHEMA IF EXISTS "${testSchema}" CASCADE`);
+  if (setupClient) await setupClient.end();
+});
+
+test('PostgreSQL seed preserves the demo dataset and remains idempotent', async () => {
+  const { seedDatabase } = await import('./seed.js');
+  await seedDatabase();
+
+  const firstCounts = await pool.query<{ users: string; projects: string; tasks: string }>(`
+    SELECT
+      (SELECT COUNT(*) FROM users)::text AS users,
+      (SELECT COUNT(*) FROM projects)::text AS projects,
+      (SELECT COUNT(*) FROM tasks)::text AS tasks
+  `);
+  assert.deepEqual(firstCounts.rows[0], { users: '8', projects: '6', tasks: '10' });
+
+  await seedDatabase();
+  const secondCounts = await pool.query<{ users: string; projects: string; tasks: string }>(`
+    SELECT
+      (SELECT COUNT(*) FROM users)::text AS users,
+      (SELECT COUNT(*) FROM projects)::text AS projects,
+      (SELECT COUNT(*) FROM tasks)::text AS tasks
+  `);
+  assert.deepEqual(secondCounts.rows[0], firstCounts.rows[0]);
 });
 
 test('local account lifecycle hashes secrets and revokes sessions and reset links', async () => {
@@ -51,7 +142,10 @@ test('local account lifecycle hashes secrets and revokes sessions and reset link
   assert(signupCookie);
   assert(signupCookie.startsWith('northstar_session='));
   assert.match(signupResponse.headers.get('set-cookie') ?? '', /HttpOnly/i);
-  const storedUser = database.prepare('SELECT password_hash FROM users WHERE email = ?').get(email) as { password_hash: string };
+  const storedUser = (await pool.query<{ password_hash: string }>(
+    'SELECT password_hash FROM users WHERE email = $1',
+    [email],
+  )).rows[0];
   assert.notEqual(storedUser.password_hash, 'InitialPass123');
   assert.match(storedUser.password_hash, /^\$2[aby]\$/);
 
@@ -75,7 +169,10 @@ test('local account lifecycle hashes secrets and revokes sessions and reset link
   assert.match(forgotBody.message, /No email was sent/);
   const token = new URL(forgotBody.resetUrl).pathname.split('/').at(-1)!;
   const tokenHash = createHash('sha256').update(token).digest('hex');
-  const resetRow = database.prepare('SELECT token_hash FROM password_reset_tokens WHERE token_hash = ?').get(tokenHash) as { token_hash: string } | undefined;
+  const resetRow = (await pool.query<{ token_hash: string }>(
+    'SELECT token_hash FROM password_reset_tokens WHERE token_hash = $1',
+    [tokenHash],
+  )).rows[0];
   assert.equal(resetRow?.token_hash, tokenHash);
   assert.notEqual(resetRow?.token_hash, token);
 
@@ -203,7 +300,7 @@ test('workplace REST endpoints for dashboard, projects, tasks, calendar, documen
   const getProjRes = await fetch(`${baseUrl}/api/projects/${projectId}`, { headers: { cookie } });
   assert.equal(getProjRes.status, 200);
   const projDetail = await getProjRes.json() as any;
-  assert.equal(projDetail.project.completedTasks, 1);
+  assert.equal(Number(projDetail.project.completed_tasks), 1);
   assert.equal(projDetail.project.progress, 100);
 
   // POST /api/calendar
@@ -226,7 +323,7 @@ test('workplace REST endpoints for dashboard, projects, tasks, calendar, documen
 
   const deleteEventRes = await fetch(`${baseUrl}/api/calendar/${eventId}`, { method: 'DELETE', headers: { cookie } });
   assert.equal(deleteEventRes.status, 200);
-  assert.equal(database.prepare('SELECT id FROM calendar_events WHERE id = ?').get(eventId), undefined);
+  assert.equal((await pool.query('SELECT id FROM calendar_events WHERE id = $1', [eventId])).rowCount, 0);
 
   // POST /api/documents, GET /api/documents, DELETE /api/documents/:id
   const documentRes = await fetch(`${baseUrl}/api/documents`, {
@@ -240,7 +337,7 @@ test('workplace REST endpoints for dashboard, projects, tasks, calendar, documen
   assert.equal((await documentsRes.json() as any).documents.some((document: any) => document.id === documentId), true);
   const deleteDocumentRes = await fetch(`${baseUrl}/api/documents/${documentId}`, { method: 'DELETE', headers: { cookie } });
   assert.equal(deleteDocumentRes.status, 200);
-  assert.equal(database.prepare('SELECT id FROM documents WHERE id = ?').get(documentId), undefined);
+  assert.equal((await pool.query('SELECT id FROM documents WHERE id = $1', [documentId])).rowCount, 0);
 
   // GET /api/reports
   const reportRes = await fetch(`${baseUrl}/api/reports`, { headers: { cookie } });
@@ -256,26 +353,32 @@ test('workplace REST endpoints for dashboard, projects, tasks, calendar, documen
   const getSettingsRes = await fetch(`${baseUrl}/api/settings`, { headers: { cookie } });
   assert.equal((await getSettingsRes.json() as any).settings.theme, 'dark');
 
-  // PATCH /api/notifications/:id/read writes through to SQLite.
+  // PATCH /api/notifications/:id/read updates a PostgreSQL-backed record.
   const notificationId = `notif_${randomUUID()}`;
-  database.prepare(`INSERT INTO notifications (id, user_id, title, message, type, is_read, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)`).run(notificationId, user.id, 'Test notification', 'Test message', 'test', 0, new Date().toISOString());
+  await pool.query(`INSERT INTO notifications (id, user_id, title, message, type, is_read, created_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7)`, [
+    notificationId, user.id, 'Test notification', 'Test message', 'test', false, new Date().toISOString(),
+  ]);
   const markReadRes = await fetch(`${baseUrl}/api/notifications/${notificationId}/read`, { method: 'PATCH', headers: { cookie } });
   assert.equal(markReadRes.status, 200);
-  assert.equal((database.prepare('SELECT is_read FROM notifications WHERE id = ?').get(notificationId) as { is_read: number }).is_read, 1);
+  assert.equal((await pool.query<{ is_read: boolean }>(
+    'SELECT is_read FROM notifications WHERE id = $1',
+    [notificationId],
+  )).rows[0].is_read, true);
 
   const deleteTaskRes = await fetch(`${baseUrl}/api/tasks/${taskId}`, { method: 'DELETE', headers: { cookie } });
   assert.equal(deleteTaskRes.status, 200);
-  assert.equal(database.prepare('SELECT id FROM tasks WHERE id = ?').get(taskId), undefined);
+  assert.equal((await pool.query('SELECT id FROM tasks WHERE id = $1', [taskId])).rowCount, 0);
 
   const deleteProjectRes = await fetch(`${baseUrl}/api/projects/${projectId}`, { method: 'DELETE', headers: { cookie } });
   assert.equal(deleteProjectRes.status, 200);
-  assert.equal(database.prepare('SELECT id FROM projects WHERE id = ?').get(projectId), undefined);
+  assert.equal((await pool.query('SELECT id FROM projects WHERE id = $1', [projectId])).rowCount, 0);
 
-  const diskDatabase = new DatabaseConnection(databasePath, { readonly: true });
-  assert.equal((diskDatabase.prepare('SELECT id FROM users WHERE id = ?').get(user.id) as { id: string }).id, user.id);
-  assert.equal((diskDatabase.prepare('SELECT theme FROM user_settings WHERE user_id = ?').get(user.id) as { theme: string }).theme, 'dark');
-  diskDatabase.close();
+  assert.equal((await pool.query('SELECT id FROM users WHERE id = $1', [user.id])).rowCount, 1);
+  assert.equal((await pool.query<{ theme: string }>(
+    'SELECT theme FROM user_settings WHERE user_id = $1',
+    [user.id],
+  )).rows[0].theme, 'dark');
 });
 
 test('read-only SQL guard permits approved SELECTs and rejects writes and private tables', async () => {
@@ -290,19 +393,83 @@ test('read-only SQL guard permits approved SELECTs and rejects writes and privat
 
   assert.doesNotThrow(() => validateReadOnlySql(projectSelect));
   assert.doesNotThrow(() => validateReadOnlySql(memberJoin));
-  assert.ok(Array.isArray(executeReadOnlySql(projectSelect)));
-  assert.ok(Array.isArray(executeReadOnlySql(memberJoin)));
+  assert.ok(Array.isArray(await executeReadOnlySql(projectSelect)));
+  assert.ok(Array.isArray(await executeReadOnlySql(memberJoin)));
+  const readOnlySetting = await executeReadOnlySql(
+    "SELECT current_setting('transaction_read_only') AS read_only FROM projects LIMIT 1",
+  );
+  assert.equal((readOnlySetting[0] as { read_only: string }).read_only, 'on');
 
   for (const sql of [
     'DELETE FROM projects',
     "UPDATE projects SET status = 'COMPLETED'",
     'DROP TABLE projects',
+    'SELECT name INTO copied_projects FROM projects',
     'SELECT name FROM projects; SELECT name FROM projects',
     'SELECT token_hash FROM sessions',
     'SELECT token_hash FROM password_reset_tokens',
     'SELECT p.name FROM projects p, sessions s',
   ]) {
     assert.throws(() => validateReadOnlySql(sql), (error: unknown) => error instanceof Error, sql);
+    await assert.rejects(executeReadOnlySql(sql), (error: unknown) => error instanceof Error);
+  }
+});
+
+test('AI Text-to-SQL executes PostgreSQL project, task, and recent activity queries', async () => {
+  const originalFetch = globalThis.fetch;
+  const generatedQueries = [
+    {
+      question: 'What are the active projects?',
+      sql: `SELECT name FROM projects WHERE status = 'ACTIVE' ORDER BY due_date ASC`,
+      verify: (rows: unknown[]) => {
+        assert.ok(rows.some((row) => (row as { name: string }).name === 'Platform Refresh'));
+      },
+    },
+    {
+      question: 'Which tasks are still to do?',
+      sql: `SELECT title, status FROM tasks WHERE status = 'TODO' ORDER BY due_date ASC LIMIT 3`,
+      verify: (rows: unknown[]) => {
+        assert.ok(rows.length > 0);
+        assert.ok(rows.every((row) => (row as { status: string }).status === 'TODO'));
+      },
+    },
+    {
+      question: 'Show the latest activity',
+      sql: `SELECT action, subject, created_at FROM activities ORDER BY created_at DESC LIMIT 5`,
+      verify: (rows: unknown[]) => {
+        assert.ok(rows.length > 0);
+        assert.ok(rows[0] && typeof (rows[0] as { created_at: unknown }).created_at === 'object');
+      },
+    },
+  ];
+  const prompts: string[] = [];
+
+  globalThis.fetch = async (_input, init) => {
+    const request = JSON.parse(String(init?.body)) as { messages: Array<{ content: string }> };
+    const prompt = request.messages[0].content;
+    prompts.push(prompt);
+    const generated = generatedQueries.find(({ question }) => prompt.includes(question));
+    assert(generated, 'Expected the SQL prompt to include the requested question.');
+    return new Response(JSON.stringify({ message: { role: 'assistant', content: generated.sql } }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+
+  try {
+    const { answerDatabaseQuestion } = await import('./ai/databaseQuery.js');
+    for (const generated of generatedQueries) {
+      const result = await answerDatabaseQuestion(generated.question);
+      assert.equal(result.sql, generated.sql);
+      assert.ok(result.rows.length > 0);
+      generated.verify(result.rows);
+      assert.ok(result.answer.length > 0);
+    }
+    assert.equal(prompts.length, generatedQueries.length);
+    assert.ok(prompts.every((prompt) => prompt.includes('PostgreSQL SELECT query')));
+    assert.ok(prompts.every((prompt) => !prompt.includes('SQLite')));
+  } finally {
+    globalThis.fetch = originalFetch;
   }
 });
 
@@ -323,6 +490,10 @@ test('database result formatter handles empty results, project lists, and counts
   assert.equal(
     formatDatabaseAnswer('How many active projects are there?', 'SELECT COUNT(*) AS total FROM projects', [{ total: 10 }]),
     'There are 10 active projects.',
+  );
+  assert.equal(
+    formatDatabaseAnswer('How many active projects are there?', 'SELECT COUNT(*) AS total FROM projects', [{ total: '3' }]),
+    'There are 3 active projects.',
   );
   assert.equal(
     formatDatabaseAnswer('What is the average project size?', 'SELECT AVG(task_count) AS average FROM projects', [{ average: 4.5 }]),
@@ -361,22 +532,28 @@ test('AI chat routes database questions through one SQL inference and preserves 
 
   const projectId = randomUUID();
   const timestamp = new Date().toISOString();
-  database.prepare(`INSERT INTO projects (id, name, description, status, start_date, due_date, created_by, created_at, updated_at)
-    VALUES (?, ?, '', 'ACTIVE', '2026-10-01', '2026-10-31', ?, ?, ?)`).run(projectId, 'Platform Refresh', user.id, timestamp, timestamp);
+  await pool.query(`INSERT INTO projects (id, name, description, status, start_date, due_date, created_by, created_at, updated_at)
+    VALUES ($1, $2, '', 'ACTIVE', '2026-10-01', '2026-10-31', $3, $4, $5)`, [
+    projectId, 'AI Chat Test Project', user.id, timestamp, timestamp,
+  ]);
 
   let inferenceCount = 0;
   let generatedSql = `SELECT name FROM projects WHERE id = '${projectId}' AND status = 'ACTIVE'`;
-  const ollamaPrompts: string[] = [];
+  const groqPrompts: string[] = [];
+  const originalGroqApiKey = process.env.GROQ_API_KEY;
+  process.env.GROQ_API_KEY = 'test-groq-api-key';
   globalThis.fetch = async (input, init) => {
-    if (String(input).endsWith('/api/chat')) {
+    if (String(input).endsWith('/chat/completions')) {
       inferenceCount += 1;
       const request = JSON.parse(String(init?.body)) as { messages: Array<{ content: string }> };
       const prompt = request.messages[0].content;
-      ollamaPrompts.push(prompt);
-      const content = prompt.includes('Convert the user\'s question into ONE SQLite SELECT query.')
+      groqPrompts.push(prompt);
+      const content = prompt.includes('Convert the user\'s question into exactly ONE SQL Server SELECT query.')
         ? generatedSql
         : 'Hello from local chat.';
-      return new Response(JSON.stringify({ message: { role: 'assistant', content } }), {
+      return new Response(JSON.stringify({
+        choices: [{ message: { role: 'assistant', content } }],
+      }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       });
@@ -392,7 +569,7 @@ test('AI chat routes database questions through one SQL inference and preserves 
     });
     assert.equal(databaseResponse.status, 200);
     assert.deepEqual(await databaseResponse.json(), {
-      answer: 'There is 1 active project: Platform Refresh.',
+      answer: 'There is 1 active project: AI Chat Test Project.',
       source: 'database',
     });
     assert.equal(inferenceCount, 1);
@@ -407,7 +584,7 @@ test('AI chat routes database questions through one SQL inference and preserves 
     assert.equal(generalResponse.status, 200);
     assert.deepEqual(await generalResponse.json(), { answer: 'Hello from local chat.' });
     assert.equal(inferenceCount, 1);
-    assert.equal(ollamaPrompts.at(-1), generalMessage);
+    assert.equal(groqPrompts.at(-1), generalMessage);
 
     inferenceCount = 0;
     generatedSql = 'DELETE FROM projects';
@@ -426,7 +603,12 @@ test('AI chat routes database questions through one SQL inference and preserves 
     assert.equal(inferenceCount, 1);
   } finally {
     globalThis.fetch = originalFetch;
-    database.prepare('DELETE FROM projects WHERE id = ?').run(projectId);
-    database.prepare('DELETE FROM users WHERE id = ?').run(user.id);
+    if (originalGroqApiKey === undefined) {
+      delete process.env.GROQ_API_KEY;
+    } else {
+      process.env.GROQ_API_KEY = originalGroqApiKey;
+    }
+    await pool.query('DELETE FROM projects WHERE id = $1', [projectId]);
+    await pool.query('DELETE FROM users WHERE id = $1', [user.id]);
   }
 });

@@ -8,6 +8,7 @@ import helmet from 'helmet';
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { answerDatabaseQuestion, isDatabaseQuestion } from './ai/databaseQuery.js';
+import { chatWithGroq } from './ai/groq.js';
 
 // ── Domain DB modules ─────────────────────────────────────────────────────────
 import * as Auth from './db/auth.js';
@@ -143,8 +144,7 @@ export function createApp(): express.Express {
         res.json({ answer: result.answer, source: 'database' });
         return;
       }
-      const { chatWithOllama } = await import('./ai/ollama.js');
-      const answer = await chatWithOllama(message);
+      const answer = await chatWithGroq(message);
       res.json({ answer });
     } catch (error) {
       console.error('AI chat request failed:', error);
@@ -607,8 +607,8 @@ export function createApp(): express.Express {
         department:          u.department ?? 'Engineering',
         status:              u.status ?? 'Active',
         profileImage:        u.profile_image,
-        assignedTasksCount:  parseInt(u.assigned_tasks_count, 10),
-        completedTasksCount: parseInt(u.completed_tasks_count, 10),
+        assignedTasksCount:  u.assigned_tasks_count,
+        completedTasksCount: u.completed_tasks_count,
       }));
 
       res.json({ users });

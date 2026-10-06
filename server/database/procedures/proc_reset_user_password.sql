@@ -1,44 +1,43 @@
-CREATE OR REPLACE PROCEDURE proc_reset_user_password(
-  p_token_hash        TEXT,
-  p_new_password_hash TEXT,
-  p_now_ms            BIGINT
-)
-LANGUAGE plpgsql
-AS $$
-DECLARE
-  v_user_id TEXT;
+USE Northstar;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.proc_reset_user_password
+    @p_token_hash        NVARCHAR(MAX),
+    @p_new_password_hash NVARCHAR(MAX),
+    @p_now_ms            BIGINT
+AS
 BEGIN
-  -- 1. Consume the token (must be unused and not expired)
-  UPDATE password_reset_tokens
-  SET    used_at = p_now_ms
-  WHERE  token_hash = p_token_hash
-    AND  used_at IS NULL
-    AND  expires_at > p_now_ms;
+    SET NOCOUNT ON;
 
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'RESET_TOKEN_INVALID';
-  END IF;
+    DECLARE @v_user_id NVARCHAR(MAX);
 
-  -- 2. Retrieve the user_id from the consumed token
-  SELECT user_id
-  INTO   v_user_id
-  FROM   password_reset_tokens
-  WHERE  token_hash = p_token_hash;
+    UPDATE dbo.password_reset_tokens
+    SET used_at = @p_now_ms
+    WHERE token_hash = @p_token_hash
+      AND used_at IS NULL
+      AND expires_at > @p_now_ms;
 
-  -- 3. Update the user's password
-  UPDATE users
-  SET    password_hash  = p_new_password_hash,
-         auth_provider  = 'local',
-         updated_at     = NOW()
-  WHERE  id = v_user_id;
+    IF @@ROWCOUNT = 0
+    BEGIN
+        THROW 50002, 'RESET_TOKEN_INVALID', 1;
+    END;
 
-  -- 4. Delete all other reset tokens for this user
-  DELETE FROM password_reset_tokens
-  WHERE  user_id = v_user_id
-    AND  token_hash <> p_token_hash;
+    SELECT @v_user_id = user_id
+    FROM dbo.password_reset_tokens
+    WHERE token_hash = @p_token_hash;
 
-  -- 5. Invalidate all active sessions for this user
-  DELETE FROM sessions
-  WHERE  user_id = v_user_id;
+    UPDATE dbo.users
+    SET
+        password_hash = @p_new_password_hash,
+        auth_provider = N'local',
+        updated_at = SYSDATETIME()
+    WHERE id = @v_user_id;
+
+    DELETE FROM dbo.password_reset_tokens
+    WHERE user_id = @v_user_id
+      AND token_hash <> @p_token_hash;
+
+    DELETE FROM dbo.sessions
+    WHERE user_id = @v_user_id;
 END;
-$$;
+GO

@@ -12,7 +12,7 @@ export async function answerDatabaseQuestion(
   question: string,
 ): Promise<DatabaseQueryResult> {
   const sql = await generateSql(question);
-  const rows = executeReadOnlySql(sql);
+  const rows = await executeReadOnlySql(sql);
   const answer = formatDatabaseAnswer(question, sql, rows);
 
   return {

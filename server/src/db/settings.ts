@@ -1,17 +1,33 @@
 /**
- * db/settings.ts — User profile & settings operations (all parameterized SQL)
+ * db/settings.ts — User profile & settings operations
+ * All operations use parameterized SQL Server queries.
  */
-import { pool } from './pool.js';
+import sql from 'mssql';
+import { getPool } from './pool.js';
 import type { UserSettingsRow } from './types.js';
 
 export async function getUserSettings(
   userId: string,
 ): Promise<UserSettingsRow | undefined> {
-  const r = await pool.query<UserSettingsRow>(
-    'SELECT * FROM user_settings WHERE user_id = $1',
-    [userId],
-  );
-  return r.rows[0];
+  const pool = await getPool();
+
+  const r = await pool
+    .request()
+    .input('userId', sql.NVarChar(255), userId)
+    .query<UserSettingsRow>(`
+      SELECT
+        user_id,
+        theme,
+        notify_task_assignments,
+        notify_project_updates,
+        notify_upcoming_meetings,
+        notify_deadline_reminders,
+        updated_at
+      FROM dbo.user_settings
+      WHERE user_id = @userId
+    `);
+
+  return r.recordset[0];
 }
 
 export async function upsertUserSettings(
@@ -22,20 +38,67 @@ export async function upsertUserSettings(
   notifyUpcomingMeetings: boolean,
   notifyDeadlineReminders: boolean,
 ): Promise<void> {
-  await pool.query(
-    `INSERT INTO user_settings
-       (user_id, theme, notify_task_assignments, notify_project_updates,
-        notify_upcoming_meetings, notify_deadline_reminders, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,NOW())
-     ON CONFLICT (user_id) DO UPDATE SET
-       theme                    = EXCLUDED.theme,
-       notify_task_assignments  = EXCLUDED.notify_task_assignments,
-       notify_project_updates   = EXCLUDED.notify_project_updates,
-       notify_upcoming_meetings = EXCLUDED.notify_upcoming_meetings,
-       notify_deadline_reminders = EXCLUDED.notify_deadline_reminders,
-       updated_at               = EXCLUDED.updated_at`,
-    [userId, theme, notifyTaskAssignments, notifyProjectUpdates, notifyUpcomingMeetings, notifyDeadlineReminders],
-  );
+  const pool = await getPool();
+
+  await pool
+    .request()
+    .input('userId', sql.NVarChar(255), userId)
+    .input('theme', sql.NVarChar(100), theme)
+    .input(
+      'notifyTaskAssignments',
+      sql.Bit,
+      notifyTaskAssignments,
+    )
+    .input(
+      'notifyProjectUpdates',
+      sql.Bit,
+      notifyProjectUpdates,
+    )
+    .input(
+      'notifyUpcomingMeetings',
+      sql.Bit,
+      notifyUpcomingMeetings,
+    )
+    .input(
+      'notifyDeadlineReminders',
+      sql.Bit,
+      notifyDeadlineReminders,
+    )
+    .query(`
+      UPDATE dbo.user_settings
+      SET
+        theme = @theme,
+        notify_task_assignments = @notifyTaskAssignments,
+        notify_project_updates = @notifyProjectUpdates,
+        notify_upcoming_meetings = @notifyUpcomingMeetings,
+        notify_deadline_reminders = @notifyDeadlineReminders,
+        updated_at = SYSUTCDATETIME()
+      WHERE user_id = @userId;
+
+      IF @@ROWCOUNT = 0
+      BEGIN
+        INSERT INTO dbo.user_settings
+        (
+          user_id,
+          theme,
+          notify_task_assignments,
+          notify_project_updates,
+          notify_upcoming_meetings,
+          notify_deadline_reminders,
+          updated_at
+        )
+        VALUES
+        (
+          @userId,
+          @theme,
+          @notifyTaskAssignments,
+          @notifyProjectUpdates,
+          @notifyUpcomingMeetings,
+          @notifyDeadlineReminders,
+          SYSUTCDATETIME()
+        );
+      END;
+    `);
 }
 
 export async function updateUserProfile(
@@ -47,20 +110,31 @@ export async function updateUserProfile(
     profile_image?: string;
   },
 ): Promise<void> {
-  await pool.query(
-    `UPDATE users SET
-       name          = COALESCE($1, name),
-       department    = COALESCE($2, department),
-       role          = COALESCE($3, role),
-       profile_image = COALESCE($4, profile_image),
-       updated_at    = NOW()
-     WHERE id = $5`,
-    [
-      fields.name          ?? null,
-      fields.department    ?? null,
-      fields.role          ?? null,
+  const pool = await getPool();
+
+  await pool
+    .request()
+    .input('name', sql.NVarChar(255), fields.name ?? null)
+    .input(
+      'department',
+      sql.NVarChar(255),
+      fields.department ?? null,
+    )
+    .input('role', sql.NVarChar(255), fields.role ?? null)
+    .input(
+      'profile_image',
+      sql.NVarChar(500),
       fields.profile_image ?? null,
-      userId,
-    ],
-  );
+    )
+    .input('userId', sql.NVarChar(255), userId)
+    .query(`
+      UPDATE dbo.users
+      SET
+        name = COALESCE(@name, name),
+        department = COALESCE(@department, department),
+        role = COALESCE(@role, role),
+        profile_image = COALESCE(@profile_image, profile_image),
+        updated_at = SYSUTCDATETIME()
+      WHERE id = @userId
+    `);
 }

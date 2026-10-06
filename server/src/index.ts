@@ -1,19 +1,23 @@
 import 'dotenv/config';
 import { createApp } from './server.js';
-import { pool } from './db/pool.js';
+import { verifySqlConnection } from './db/pool.js';
 
-pool.connect()
-  .then((client) => {
-    client.release();
-    console.info('✅  PostgreSQL connection verified.');
+verifySqlConnection()
+  .then((info) => {
+    console.info(
+      `✅ SQL Server connection verified (${info.server}/${info.databaseName}).`,
+    );
 
     const app = createApp();
     const port = Number(process.env.PORT ?? 3000);
+
     app.listen(port, () => {
-      console.info(`Northstar API listening on http://localhost:${port} (PostgreSQL)`);
+      console.info(
+        `Northstar API listening on http://localhost:${port} (SQL Server)`,
+      );
     });
   })
   .catch((err: unknown) => {
-    console.error('❌  Failed to connect to PostgreSQL:', err);
+    console.error('❌ Failed to connect to SQL Server:', err);
     process.exitCode = 1;
   });

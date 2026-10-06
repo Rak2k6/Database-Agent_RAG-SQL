@@ -1,4 +1,4 @@
-import { database } from '../db.js';
+import { getPool } from '../db/pool.js';
 
 export interface ProjectSummary {
   id: string;
@@ -8,22 +8,27 @@ export interface ProjectSummary {
   due_date: string;
 }
 
-export function getActiveProjects(): ProjectSummary[] {
-  const statement = database.prepare(`
+export async function getActiveProjects(): Promise<ProjectSummary[]> {
+  const pool = await getPool();
+
+  const result = await pool.request().query<ProjectSummary>(`
     SELECT
       id,
       name,
       status,
-      start_date,
-      due_date
-    FROM projects
+      CONVERT(varchar(10), start_date, 23) AS start_date,
+      CONVERT(varchar(10), due_date, 23) AS due_date
+    FROM dbo.projects
     WHERE status = 'ACTIVE'
     ORDER BY due_date ASC
   `);
 
-  return statement.all() as ProjectSummary[];
+  return result.recordset;
 }
-export function formatProjectsForAI(projects: ProjectSummary[]): string {
+
+export function formatProjectsForAI(
+  projects: ProjectSummary[],
+): string {
   return projects.map((project) => (
     `- ${project.name} | Status: ${project.status} | ` +
     `Start: ${project.start_date} | Due: ${project.due_date}`

@@ -1,9 +1,10 @@
 /**
  * db/calendar.ts — Calendar event operations
- * Read  → list_calendar_events PostgreSQL function
- * Write → simple INSERT + standalone fn_log_activity call, simple DELETE
+ * Read  → SQL Server list_calendar_events function
+ * Write → INSERT + proc_log_activity + DELETE
  */
-import { pool } from './pool.js';
+import sql from 'mssql';
+import { getPool } from './pool.js';
 
 export interface CalendarEventRow {
   id: string;
@@ -17,13 +18,33 @@ export interface CalendarEventRow {
   creator_name: string;
 }
 
+function parseJsonResult<T>(value: string | null | undefined): T | undefined {
+  if (value == null) {
+    return undefined;
+  }
+
+  return JSON.parse(value) as T;
+}
+
 // ── Reads ────────────────────────────────────────────────────────────────────
 
 export async function listCalendarEvents(): Promise<CalendarEventRow[]> {
-  const r = await pool.query<CalendarEventRow>(
-    'SELECT * FROM list_calendar_events()',
-  );
-  return r.rows;
+  const pool = await getPool();
+
+  const r = await pool
+    .request()
+    .input('p_limit', sql.Int, 100)
+    .input('p_offset', sql.Int, 0)
+    .query<{ result: string | null }>(`
+      SELECT dbo.list_calendar_events(
+        @p_limit,
+        @p_offset
+      ) AS result
+    `);
+
+  const parsed = parseJsonResult<CalendarEventRow[]>(r.recordset[0]?.result);
+
+  return parsed ?? [];
 }
 
 // ── Writes ───────────────────────────────────────────────────────────────────
@@ -38,18 +59,46 @@ export async function createCalendarEvent(
   createdBy: string,
   projectId: string | null,
 ): Promise<void> {
-  await pool.query(
-    `INSERT INTO calendar_events (id, title, description, start_time, end_time, event_type, created_by, project_id, created_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())`,
-    [id, title, description, startTime, endTime, eventType, createdBy, projectId],
-  );
-  // Log activity standalone (auto-commits in its own implicit transaction)
-  await pool.query(
-    `SELECT fn_log_activity($1, 'scheduled a meeting for', 'event', $2, $3)`,
-    [createdBy, id, title],
-  );
+  const pool = await getPool();
+
+  await pool
+    .request()
+    .input('id', sql.NVarChar(255), id)
+    .input('title', sql.NVarChar(255), title)
+    .input('description', sql.NVarChar(sql.MAX), description)
+    .input('start_time', sql.DateTime2, new Date(startTime))
+    .input('end_time', sql.DateTime2, new Date(endTime))
+    .input('event_type', sql.NVarChar(100), eventType)
+    .input('created_by', sql.NVarChar(255), createdBy)
+    .input('project_id', sql.NVarChar(255), projectId)
+    .query(`
+      INSERT INTO dbo.calendar_events
+        (id, title, description, start_time, end_time,
+         event_type, created_by, project_id, created_at)
+      VALUES
+        (@id, @title, @description, @start_time, @end_time,
+         @event_type, @created_by, @project_id, SYSUTCDATETIME())
+    `);
+
+  // Log activity using the SQL Server stored procedure.
+  await pool
+    .request()
+    .input('p_user_id', sql.NVarChar(255), createdBy)
+    .input('p_action', sql.NVarChar(255), 'scheduled a meeting for')
+    .input('p_entity_type', sql.NVarChar(100), 'event')
+    .input('p_entity_id', sql.NVarChar(255), id)
+    .input('p_subject', sql.NVarChar(255), title)
+    .execute('dbo.proc_log_activity');
 }
 
 export async function deleteCalendarEvent(eventId: string): Promise<void> {
-  await pool.query('DELETE FROM calendar_events WHERE id = $1', [eventId]);
+  const pool = await getPool();
+
+  await pool
+    .request()
+    .input('eventId', sql.NVarChar(255), eventId)
+    .query(`
+      DELETE FROM dbo.calendar_events
+      WHERE id = @eventId
+    `);
 }

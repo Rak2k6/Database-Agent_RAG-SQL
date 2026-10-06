@@ -7,6 +7,7 @@ function asRecord(row: unknown): DatabaseRow {
 function displayValue(value: unknown): string {
   if (value === null || value === undefined) return '—';
   if (typeof value === 'string') return value;
+  if (value instanceof Date) return value.toISOString();
   if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') return String(value);
   return JSON.stringify(value);
 }
@@ -44,31 +45,36 @@ function singularize(subject: string): string {
   });
 }
 
-function isNumeric(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value);
+function numericValue(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim() !== '' && Number.isFinite(Number(value))) return Number(value);
+  return undefined;
 }
 
 function formatAggregate(question: string, sql: string, row: DatabaseRow): string | undefined {
   const values = Object.values(row);
   if (values.length !== 1) return undefined;
 
-  const aggregate = sql.match(/\b(COUNT|AVG|SUM|MAX|MIN)\s*\(/i)?.[1]?.toUpperCase();
+  const aggregate = sql.match(
+  /\b(COUNT|AVG|SUM|MAX|MIN)\s*\(/i,)?.[1]?.toUpperCase();
   if (!aggregate) return undefined;
 
   const value = values[0];
   if (aggregate === 'COUNT') {
-    if (!isNumeric(value)) return undefined;
+    const count = numericValue(value);
+    if (count === undefined) return undefined;
     const subject = questionSubject(question, 'records');
-    return `${value === 1 ? 'There is' : 'There are'} ${value} ${value === 1 ? singularize(subject) : subject}.`;
+    return `${count === 1 ? 'There is' : 'There are'} ${count} ${count === 1 ? singularize(subject) : subject}.`;
   }
 
-  if ((aggregate === 'AVG' || aggregate === 'SUM') && !isNumeric(value)) return undefined;
+  const numeric = numericValue(value);
+  if ((aggregate === 'AVG' || aggregate === 'SUM') && numeric === undefined) return undefined;
   const label = aggregate === 'AVG' ? 'Average' : aggregate === 'SUM' ? 'Total' : aggregate === 'MAX' ? 'Maximum' : 'Minimum';
-  return `${label}: ${displayValue(value)}.`;
+  return `${label}: ${numeric === undefined ? displayValue(value) : numeric}.`;
 }
 
 function formatProjectList(question: string, sql: string, rows: DatabaseRow[]): string | undefined {
-  if (!/\bFROM\s+projects\b/i.test(sql)) return undefined;
+  if (!/\bFROM\s+(?:dbo\.)?projects\b/i.test(sql)) return undefined;
 
   const nameColumn = Object.keys(rows[0] ?? {}).find((column) => /^(?:project_)?name$/i.test(column));
   if (!nameColumn) return undefined;

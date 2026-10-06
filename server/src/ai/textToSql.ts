@@ -1,99 +1,101 @@
-import { chatWithOllama } from './ollama.js';
+import { chatWithGroq } from './groq.js';
 
 const DATABASE_SCHEMA = `
-Tables available for querying:
+SQL Server dbo schema. Only query these application tables:
 
-projects:
-- id: TEXT
-- name: TEXT
-- description: TEXT
-- status: TEXT
+dbo.projects:
+- id: NVARCHAR
+- name: NVARCHAR
+- description: NVARCHAR
+- status: NVARCHAR
   Allowed values: PLANNED, ACTIVE, ON_HOLD, COMPLETED, ARCHIVED
-- start_date: TEXT
-- due_date: TEXT
-- created_by: TEXT
-- created_at: TEXT
-- updated_at: TEXT
+- start_date: DATETIME2
+- due_date: DATETIME2
+- created_by: NVARCHAR
+- created_at: DATETIME2
+- updated_at: DATETIME2
 
-project_members:
-- project_id: TEXT
-- user_id: TEXT
-- role: TEXT
+dbo.project_members:
+- project_id: NVARCHAR
+- user_id: NVARCHAR
+- role: NVARCHAR
 
-tasks:
-- id: TEXT
-- title: TEXT
-- description: TEXT
-- project_id: TEXT
-- assigned_to: TEXT
-- created_by: TEXT
-- priority: TEXT
+dbo.tasks:
+- id: NVARCHAR
+- title: NVARCHAR
+- description: NVARCHAR
+- project_id: NVARCHAR
+- assigned_to: NVARCHAR
+- created_by: NVARCHAR
+- priority: NVARCHAR
   Allowed values: HIGH, MEDIUM, LOW
-- status: TEXT
+- status: NVARCHAR
   Allowed values: TODO, IN_PROGRESS, COMPLETED, CANCELLED
-- due_date: TEXT
-- created_at: TEXT
-- updated_at: TEXT
-- completed_at: TEXT
+- due_date: DATETIME2
+- created_at: DATETIME2
+- updated_at: DATETIME2
+- completed_at: DATETIME2 or NULL
 
-users:
-- id: TEXT
-- name: TEXT
-- email: TEXT
-- role: TEXT
-- department: TEXT
-- status: TEXT
+dbo.users:
+- id: NVARCHAR
+- name: NVARCHAR
+- email: NVARCHAR
+- role: NVARCHAR
+- department: NVARCHAR
+- status: NVARCHAR
   Allowed values: Active, Inactive
+- created_at: DATETIME2
+- updated_at: DATETIME2
 
-documents:
-- id: TEXT
-- name: TEXT
-- file_name: TEXT
-- file_path: TEXT
-- file_type: TEXT
-- file_size: INTEGER
-- uploaded_by: TEXT
-- project_id: TEXT
-- folder: TEXT
-- created_at: TEXT
-- updated_at: TEXT
+dbo.documents:
+- id: NVARCHAR
+- name: NVARCHAR
+- file_name: NVARCHAR
+- file_path: NVARCHAR
+- file_type: NVARCHAR
+- file_size: BIGINT
+- uploaded_by: NVARCHAR
+- project_id: NVARCHAR
+- folder: NVARCHAR
+- created_at: DATETIME2
+- updated_at: DATETIME2
 
-calendar_events:
-- id: TEXT
-- title: TEXT
-- description: TEXT
-- start_time: TEXT
-- end_time: TEXT
-- event_type: TEXT
+dbo.calendar_events:
+- id: NVARCHAR
+- title: NVARCHAR
+- description: NVARCHAR
+- start_time: DATETIME2
+- end_time: DATETIME2
+- event_type: NVARCHAR
   Allowed values: MEETING, EVENT, DEADLINE, REMINDER
-- created_by: TEXT
-- project_id: TEXT
-- created_at: TEXT
+- created_by: NVARCHAR
+- project_id: NVARCHAR
+- created_at: DATETIME2
 
-activities:
-- id: TEXT
-- user_id: TEXT
-- action: TEXT
-- entity_type: TEXT
-- entity_id: TEXT
-- subject: TEXT
-- created_at: TEXT
+dbo.activities:
+- id: NVARCHAR
+- user_id: NVARCHAR
+- action: NVARCHAR
+- entity_type: NVARCHAR
+- entity_id: NVARCHAR
+- subject: NVARCHAR
+- created_at: DATETIME2
 
-notifications:
-- id: TEXT
-- user_id: TEXT
-- title: TEXT
-- message: TEXT
-- type: TEXT
-- is_read: INTEGER
-- created_at: TEXT
+dbo.notifications:
+- id: NVARCHAR
+- user_id: NVARCHAR
+- title: NVARCHAR
+- message: NVARCHAR
+- type: NVARCHAR
+- is_read: BIT
+- created_at: DATETIME2
 `;
 
 export async function generateSql(question: string): Promise<string> {
   const prompt = `
 You are a SQL query generator for the Northstar AI Workplace application.
 
-Convert the user's question into ONE SQLite SELECT query.
+Convert the user's question into exactly ONE SQL Server SELECT query.
 
 Rules:
 - Return ONLY the SQL query.
@@ -101,12 +103,22 @@ Rules:
 - Only use the tables and columns listed in the schema.
 - Generate SELECT queries only.
 - Select only the columns needed to answer the question; never use SELECT *.
-- Never generate INSERT, UPDATE, DELETE, DROP, ALTER, CREATE, PRAGMA, or other write operations.
+- Use SQL Server T-SQL syntax.
+- Always reference application tables using the dbo schema, for example dbo.projects.
+- Use SQL Server date/time expressions such as GETDATE(), GETUTCDATE(), SYSUTCDATETIME(), DATEADD(), DATEDIFF(), and CAST() or CONVERT() when appropriate.
+- Use SQL Server boolean representation: BIT values are 1 and 0, not TRUE and FALSE.
+- Use TOP when a query requires a row limit.
+- Do not use PostgreSQL-specific syntax such as :: casts, ILIKE, TRUE/FALSE boolean literals, NOW(), INTERVAL, LIMIT, OFFSET without ORDER BY, RETURNING, or PostgreSQL-specific functions.
+- For pagination, use SQL Server OFFSET ... FETCH NEXT ... ROWS ONLY only when necessary.
+- Never generate INSERT, UPDATE, DELETE, MERGE, DROP, ALTER, CREATE, TRUNCATE, EXEC, EXECUTE, or other write/administrative operations.
 - Do not generate multiple statements.
 - Do not include SQL comments, explanations, or markdown fences.
 - Use the exact enum values specified in the schema.
 - Treat enum values as case-sensitive.
 - Do not invent table names, columns, statuses, or values.
+- Do not use stored procedures, functions, views, system tables, INFORMATION_SCHEMA, or undocumented objects.
+- Do not use subqueries as table sources in FROM or JOIN.
+- Only query the explicitly listed dbo application tables.
 
 ${DATABASE_SCHEMA}
 
@@ -116,7 +128,7 @@ ${question}
 
   const start = Date.now();
 
-  const response = await chatWithOllama(prompt);
+  const response = await chatWithGroq(prompt);
 
   console.log(`[AI] SQL generation: ${Date.now() - start} ms`);
 

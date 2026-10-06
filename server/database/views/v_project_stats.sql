@@ -1,7 +1,12 @@
-CREATE OR REPLACE VIEW v_project_stats AS
+USE Northstar;
+GO
+
+CREATE OR ALTER VIEW dbo.v_project_stats
+AS
 SELECT
-  COUNT(*)                                      AS total,
-  COUNT(*) FILTER (WHERE status = 'ACTIVE')     AS active,
-  COUNT(*) FILTER (WHERE status = 'COMPLETED')  AS completed,
-  COUNT(*) FILTER (WHERE status = 'PLANNED')    AS planned
-FROM projects;
+    COUNT(*) AS total,
+    SUM(CASE WHEN status = N'ACTIVE' THEN 1 ELSE 0 END) AS active,
+    SUM(CASE WHEN status = N'COMPLETED' THEN 1 ELSE 0 END) AS completed,
+    SUM(CASE WHEN status = N'PLANNED' THEN 1 ELSE 0 END) AS planned
+FROM dbo.projects;
+GO

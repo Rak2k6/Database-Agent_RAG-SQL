@@ -1,49 +1,50 @@
-CREATE OR REPLACE PROCEDURE proc_update_project(
-  p_project_id  TEXT,
-  p_user_id     TEXT,
-  p_name        TEXT        DEFAULT NULL,
-  p_description TEXT        DEFAULT NULL,
-  p_status      TEXT        DEFAULT NULL,
-  p_start_date  TIMESTAMPTZ DEFAULT NULL,
-  p_due_date    TIMESTAMPTZ DEFAULT NULL
-)
-LANGUAGE plpgsql
-AS $$
-DECLARE
-  v_existing_name TEXT;
-  v_effective_name TEXT;
+USE Northstar;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.proc_update_project
+    @p_project_id  NVARCHAR(MAX),
+    @p_user_id     NVARCHAR(MAX),
+    @p_name        NVARCHAR(MAX) = NULL,
+    @p_description NVARCHAR(MAX) = NULL,
+    @p_status      NVARCHAR(MAX) = NULL,
+    @p_start_date  DATETIME2 = NULL,
+    @p_due_date    DATETIME2 = NULL
+AS
 BEGIN
-  -- 1. Fetch the existing project (error if not found)
-  SELECT name
-  INTO   v_existing_name
-  FROM   projects
-  WHERE  id = p_project_id;
+    SET NOCOUNT ON;
 
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'NOT_FOUND: project %', p_project_id;
-  END IF;
+    DECLARE @v_existing_name NVARCHAR(MAX);
+    DECLARE @v_effective_name NVARCHAR(MAX);
 
-  -- 2. Update with COALESCE — NULL means "leave unchanged"
-  UPDATE projects
-  SET
-    name        = COALESCE(p_name,        name),
-    description = COALESCE(p_description, description),
-    status      = COALESCE(p_status,      status),
-    start_date  = COALESCE(p_start_date,  start_date),
-    due_date    = COALESCE(p_due_date,    due_date),
-    updated_at  = NOW()
-  WHERE id = p_project_id;
+    SELECT @v_existing_name = name
+    FROM dbo.projects
+    WHERE id = @p_project_id;
 
-  -- 3. Resolve effective name for activity log
-  v_effective_name := COALESCE(p_name, v_existing_name);
+    IF @v_existing_name IS NULL
+    BEGIN
+        THROW 50003, 'NOT_FOUND: project does not exist', 1;
+    END;
 
-  -- 4. Log activity
-  PERFORM fn_log_activity(
-    p_user_id,
-    'updated project',
-    'project',
-    p_project_id,
-    v_effective_name
-  );
+    UPDATE dbo.projects
+    SET
+        name = COALESCE(@p_name, name),
+        description = COALESCE(@p_description, description),
+        status = COALESCE(@p_status, status),
+        start_date = COALESCE(@p_start_date, start_date),
+        due_date = COALESCE(@p_due_date, due_date),
+        updated_at = SYSDATETIME()
+    WHERE id = @p_project_id;
+
+    SET @v_effective_name = COALESCE(@p_name, @v_existing_name);
+
+    DECLARE @v_activity_id NVARCHAR(MAX);
+
+    EXEC dbo.proc_log_activity
+        @p_user_id     = @p_user_id,
+        @p_action      = N'updated project',
+        @p_entity_type = N'project',
+        @p_entity_id   = @p_project_id,
+        @p_subject     = @v_effective_name,
+        @p_id          = @v_activity_id OUTPUT;
 END;
-$$;
+GO

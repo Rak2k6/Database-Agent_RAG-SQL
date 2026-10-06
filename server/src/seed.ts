@@ -1,9 +1,11 @@
 import bcrypt from 'bcryptjs';
-import { database } from './db.js';
+import { pool } from './db/pool.js';
 
 export async function seedDatabase() {
-  const projectCount = (database.prepare('SELECT COUNT(*) as count FROM projects').get() as { count: number }).count;
-  if (projectCount > 0) {
+  const projectCount = await pool.query<{ count: string }>(
+    'SELECT COUNT(*)::text AS count FROM projects',
+  );
+  if (Number(projectCount.rows[0].count) > 0) {
     return; // Already seeded
   }
 
@@ -21,13 +23,12 @@ export async function seedDatabase() {
     { id: 'usr_maya', name: 'Maya Lin', email: 'maya.lin@northstarai.com', role: 'UX Researcher', department: 'Design', status: 'Active' },
   ];
 
-  const insertUser = database.prepare(`
-    INSERT OR IGNORE INTO users (id, name, email, password_hash, auth_provider, role, department, status, created_at, updated_at)
-    VALUES (?, ?, ?, ?, 'local', ?, ?, ?, ?, ?)
-  `);
-
   for (const u of usersData) {
-    insertUser.run(u.id, u.name, u.email, defaultPasswordHash, u.role, u.department, u.status, now, now);
+    await pool.query(`
+      INSERT INTO users (id, name, email, password_hash, auth_provider, role, department, status, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, 'local', $5, $6, $7, $8, $9)
+      ON CONFLICT DO NOTHING
+    `, [u.id, u.name, u.email, defaultPasswordHash, u.role, u.department, u.status, now, now]);
   }
 
   // Projects
@@ -88,13 +89,11 @@ export async function seedDatabase() {
     },
   ];
 
-  const insertProject = database.prepare(`
-    INSERT INTO projects (id, name, description, status, start_date, due_date, created_by, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-
   for (const p of projectsData) {
-    insertProject.run(p.id, p.name, p.description, p.status, p.start_date, p.due_date, p.created_by, now, now);
+    await pool.query(`
+      INSERT INTO projects (id, name, description, status, start_date, due_date, created_by, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    `, [p.id, p.name, p.description, p.status, p.start_date, p.due_date, p.created_by, now, now]);
   }
 
   // Project Members
@@ -115,11 +114,11 @@ export async function seedDatabase() {
     { project_id: 'proj_security', user_id: 'usr_chris', role: 'Owner' },
   ];
 
-  const insertMember = database.prepare(`
-    INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, ?)
-  `);
   for (const m of membersData) {
-    insertMember.run(m.project_id, m.user_id, m.role);
+    await pool.query(
+      'INSERT INTO project_members (project_id, user_id, role) VALUES ($1, $2, $3)',
+      [m.project_id, m.user_id, m.role],
+    );
   }
 
   // Tasks
@@ -236,14 +235,12 @@ export async function seedDatabase() {
     }
   ];
 
-  const insertTask = database.prepare(`
-    INSERT INTO tasks (id, title, description, project_id, assigned_to, created_by, priority, status, due_date, created_at, updated_at, completed_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-
   for (const t of tasksData) {
     const completedAt = t.status === 'COMPLETED' ? now : null;
-    insertTask.run(t.id, t.title, t.description, t.project_id, t.assigned_to, t.created_by, t.priority, t.status, t.due_date, now, now, completedAt);
+    await pool.query(`
+      INSERT INTO tasks (id, title, description, project_id, assigned_to, created_by, priority, status, due_date, created_at, updated_at, completed_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+    `, [t.id, t.title, t.description, t.project_id, t.assigned_to, t.created_by, t.priority, t.status, t.due_date, now, now, completedAt]);
   }
 
   // Calendar Events
@@ -300,13 +297,11 @@ export async function seedDatabase() {
     }
   ];
 
-  const insertEvent = database.prepare(`
-    INSERT INTO calendar_events (id, title, description, start_time, end_time, event_type, created_by, project_id, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-
   for (const e of calendarData) {
-    insertEvent.run(e.id, e.title, e.description, e.start_time, e.end_time, e.event_type, e.created_by, e.project_id, now);
+    await pool.query(`
+      INSERT INTO calendar_events (id, title, description, start_time, end_time, event_type, created_by, project_id, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    `, [e.id, e.title, e.description, e.start_time, e.end_time, e.event_type, e.created_by, e.project_id, now]);
   }
 
   // Documents
@@ -357,13 +352,11 @@ export async function seedDatabase() {
     }
   ];
 
-  const insertDoc = database.prepare(`
-    INSERT INTO documents (id, name, file_name, file_path, file_type, file_size, uploaded_by, project_id, folder, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-
   for (const d of documentsData) {
-    insertDoc.run(d.id, d.name, d.file_name, d.file_path, d.file_type, d.file_size, d.uploaded_by, d.project_id, d.folder, now, now);
+    await pool.query(`
+      INSERT INTO documents (id, name, file_name, file_path, file_type, file_size, uploaded_by, project_id, folder, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    `, [d.id, d.name, d.file_name, d.file_path, d.file_type, d.file_size, d.uploaded_by, d.project_id, d.folder, now, now]);
   }
 
   // Activities
@@ -375,28 +368,24 @@ export async function seedDatabase() {
     { id: 'act_5', user_id: 'usr_rakesh', action: 'assigned a task to', entity_type: 'task', entity_id: 'task_1', subject: 'Platform Refresh', created_at: new Date(Date.now() - 36 * 3600 * 1000).toISOString() },
   ];
 
-  const insertAct = database.prepare(`
-    INSERT INTO activities (id, user_id, action, entity_type, entity_id, subject, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `);
-
   for (const a of activitiesData) {
-    insertAct.run(a.id, a.user_id, a.action, a.entity_type, a.entity_id, a.subject, a.created_at);
+    await pool.query(`
+      INSERT INTO activities (id, user_id, action, entity_type, entity_id, subject, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `, [a.id, a.user_id, a.action, a.entity_type, a.entity_id, a.subject, a.created_at]);
   }
 
   // Notifications for users
   const notificationsData = [
-    { id: 'notif_1', user_id: 'usr_rakesh', title: 'Task assigned', message: 'Morgan Reed assigned you "Review Q3 product roadmap"', type: 'task', is_read: 0, created_at: now },
-    { id: 'notif_2', user_id: 'usr_rakesh', title: 'Meeting reminder', message: 'Product weekly sync starts in 30 minutes', type: 'meeting', is_read: 0, created_at: now },
-    { id: 'notif_3', user_id: 'usr_jordan', title: 'Project update', message: 'Alex Morgan updated Brand Evolution status', type: 'project', is_read: 0, created_at: now },
+    { id: 'notif_1', user_id: 'usr_rakesh', title: 'Task assigned', message: 'Morgan Reed assigned you "Review Q3 product roadmap"', type: 'task', is_read: false, created_at: now },
+    { id: 'notif_2', user_id: 'usr_rakesh', title: 'Meeting reminder', message: 'Product weekly sync starts in 30 minutes', type: 'meeting', is_read: false, created_at: now },
+    { id: 'notif_3', user_id: 'usr_jordan', title: 'Project update', message: 'Alex Morgan updated Brand Evolution status', type: 'project', is_read: false, created_at: now },
   ];
 
-  const insertNotif = database.prepare(`
-    INSERT INTO notifications (id, user_id, title, message, type, is_read, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `);
-
   for (const n of notificationsData) {
-    insertNotif.run(n.id, n.user_id, n.title, n.message, n.type, n.is_read, n.created_at);
+    await pool.query(`
+      INSERT INTO notifications (id, user_id, title, message, type, is_read, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `, [n.id, n.user_id, n.title, n.message, n.type, n.is_read, n.created_at]);
   }
 }

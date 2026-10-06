@@ -1,157 +1,320 @@
-CREATE SCHEMA IF NOT EXISTS public;
+CREATE DATABASE Northstar;
+GO
 
--- Type Conversions (SQLite -> PostgreSQL):
--- 1. SQLite TEXT date/time strings -> PostgreSQL TIMESTAMPTZ
--- 2. SQLite INTEGER booleans (0/1) -> PostgreSQL BOOLEAN (false/true)
--- 3. SQLite INTEGER timestamps/sizes -> PostgreSQL BIGINT (to prevent overflow for JS MS timestamps and large files)
--- 4. SQLite COLLATE NOCASE -> PostgreSQL UNIQUE INDEX with LOWER(email)
+USE Northstar;
+GO
 
-CREATE TABLE IF NOT EXISTS users (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    email TEXT NOT NULL,
-    password_hash TEXT,
-    auth_provider TEXT NOT NULL CHECK (auth_provider IN ('local', 'google')),
-    google_id TEXT UNIQUE,
-    profile_image TEXT,
-    role TEXT NOT NULL DEFAULT 'Member',
-    department TEXT NOT NULL DEFAULT 'Engineering',
-    status TEXT NOT NULL DEFAULT 'Active',
-    created_at TIMESTAMPTZ NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL
+CREATE TABLE users (
+    id NVARCHAR(255) PRIMARY KEY,
+    name NVARCHAR(255) NOT NULL,
+    email NVARCHAR(255) NOT NULL,
+    password_hash NVARCHAR(MAX),
+    auth_provider NVARCHAR(50) NOT NULL,
+    google_id NVARCHAR(255) UNIQUE,
+    profile_image NVARCHAR(MAX),
+    role NVARCHAR(100) NOT NULL DEFAULT N'Member',
+    department NVARCHAR(100) NOT NULL DEFAULT N'Engineering',
+    status NVARCHAR(50) NOT NULL DEFAULT N'Active',
+    created_at DATETIME2 NOT NULL,
+    updated_at DATETIME2 NOT NULL,
+
+    CONSTRAINT users_auth_provider_chk
+        CHECK (auth_provider IN (N'local', N'google'))
 );
+GO
 
--- Ensure case-insensitive uniqueness for email (replaces COLLATE NOCASE)
-CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_idx ON users (LOWER(email));
+CREATE UNIQUE INDEX users_email_lower_idx
+ON users (email);
+GO
 
-CREATE TABLE IF NOT EXISTS password_reset_tokens (
-    token_hash TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+
+CREATE TABLE password_reset_tokens (
+    token_hash NVARCHAR(255) PRIMARY KEY,
+    user_id NVARCHAR(255) NOT NULL,
     expires_at BIGINT NOT NULL,
-    used_at BIGINT
-);
+    used_at BIGINT,
 
-CREATE TABLE IF NOT EXISTS sessions (
-    token_hash TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT password_reset_tokens_user_fk
+        FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE
+);
+GO
+
+
+CREATE TABLE sessions (
+    token_hash NVARCHAR(255) PRIMARY KEY,
+    user_id NVARCHAR(255) NOT NULL,
     expires_at BIGINT NOT NULL,
-    created_at BIGINT NOT NULL
-);
+    created_at BIGINT NOT NULL,
 
-CREATE TABLE IF NOT EXISTS projects (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    description TEXT NOT NULL DEFAULT '',
-    status TEXT NOT NULL CHECK (status IN ('PLANNED', 'ACTIVE', 'ON_HOLD', 'COMPLETED', 'ARCHIVED')),
-    start_date TIMESTAMPTZ NOT NULL,
-    due_date TIMESTAMPTZ NOT NULL,
-    created_by TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    created_at TIMESTAMPTZ NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL
+    CONSTRAINT sessions_user_fk
+        FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE
 );
+GO
 
-CREATE TABLE IF NOT EXISTS project_members (
-    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    role TEXT NOT NULL DEFAULT 'Member',
-    PRIMARY KEY (project_id, user_id)
+
+CREATE TABLE projects (
+    id NVARCHAR(255) PRIMARY KEY,
+    name NVARCHAR(255) NOT NULL,
+    description NVARCHAR(MAX) NOT NULL DEFAULT N'',
+    status NVARCHAR(50) NOT NULL,
+    start_date DATETIME2 NOT NULL,
+    due_date DATETIME2 NOT NULL,
+    created_by NVARCHAR(255) NOT NULL,
+    created_at DATETIME2 NOT NULL,
+    updated_at DATETIME2 NOT NULL,
+
+    CONSTRAINT projects_status_chk
+        CHECK (
+            status IN (
+                N'PLANNED',
+                N'ACTIVE',
+                N'ON_HOLD',
+                N'COMPLETED',
+                N'ARCHIVED'
+            )
+        ),
+
+    CONSTRAINT projects_created_by_fk
+        FOREIGN KEY (created_by)
+        REFERENCES users(id)
+        ON DELETE CASCADE
 );
+GO
 
-CREATE TABLE IF NOT EXISTS tasks (
-    id TEXT PRIMARY KEY,
-    title TEXT NOT NULL,
-    description TEXT NOT NULL DEFAULT '',
-    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-    assigned_to TEXT REFERENCES users(id) ON DELETE SET NULL,
-    created_by TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    priority TEXT NOT NULL CHECK (priority IN ('HIGH', 'MEDIUM', 'LOW')),
-    status TEXT NOT NULL CHECK (status IN ('TODO', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED')),
-    due_date TIMESTAMPTZ NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL,
-    completed_at TIMESTAMPTZ
+
+CREATE TABLE project_members (
+    project_id NVARCHAR(255) NOT NULL,
+    user_id NVARCHAR(255) NOT NULL,
+    role NVARCHAR(100) NOT NULL DEFAULT N'Member',
+
+    CONSTRAINT project_members_pk
+        PRIMARY KEY (project_id, user_id),
+
+    CONSTRAINT project_members_project_fk
+        FOREIGN KEY (project_id)
+        REFERENCES projects(id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT project_members_user_fk
+        FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE
 );
+GO
 
-CREATE TABLE IF NOT EXISTS calendar_events (
-    id TEXT PRIMARY KEY,
-    title TEXT NOT NULL,
-    description TEXT NOT NULL DEFAULT '',
-    start_time TIMESTAMPTZ NOT NULL,
-    end_time TIMESTAMPTZ NOT NULL,
-    event_type TEXT NOT NULL CHECK (event_type IN ('MEETING', 'EVENT', 'DEADLINE', 'REMINDER')),
-    created_by TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
-    created_at TIMESTAMPTZ NOT NULL
+
+CREATE TABLE tasks (
+    id NVARCHAR(255) PRIMARY KEY,
+    title NVARCHAR(255) NOT NULL,
+    description NVARCHAR(MAX) NOT NULL DEFAULT N'',
+    project_id NVARCHAR(255) NOT NULL,
+    assigned_to NVARCHAR(255),
+    created_by NVARCHAR(255) NOT NULL,
+    priority NVARCHAR(50) NOT NULL,
+    status NVARCHAR(50) NOT NULL,
+    due_date DATETIME2 NOT NULL,
+    created_at DATETIME2 NOT NULL,
+    updated_at DATETIME2 NOT NULL,
+    completed_at DATETIME2,
+
+    CONSTRAINT tasks_priority_chk
+        CHECK (
+            priority IN (
+                N'HIGH',
+                N'MEDIUM',
+                N'LOW'
+            )
+        ),
+
+    CONSTRAINT tasks_status_chk
+        CHECK (
+            status IN (
+                N'TODO',
+                N'IN_PROGRESS',
+                N'COMPLETED',
+                N'CANCELLED'
+            )
+        ),
+
+    CONSTRAINT tasks_project_fk
+        FOREIGN KEY (project_id)
+        REFERENCES projects(id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT tasks_assigned_to_fk
+        FOREIGN KEY (assigned_to)
+        REFERENCES users(id)
+        ON DELETE SET NULL,
+
+    CONSTRAINT tasks_created_by_fk
+        FOREIGN KEY (created_by)
+        REFERENCES users(id)
+        ON DELETE CASCADE
 );
+GO
 
-CREATE TABLE IF NOT EXISTS documents (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    file_name TEXT NOT NULL,
-    file_path TEXT NOT NULL,
-    file_type TEXT NOT NULL,
+
+CREATE TABLE calendar_events (
+    id NVARCHAR(255) PRIMARY KEY,
+    title NVARCHAR(255) NOT NULL,
+    description NVARCHAR(MAX) NOT NULL DEFAULT N'',
+    start_time DATETIME2 NOT NULL,
+    end_time DATETIME2 NOT NULL,
+    event_type NVARCHAR(50) NOT NULL,
+    created_by NVARCHAR(255) NOT NULL,
+    project_id NVARCHAR(255),
+    created_at DATETIME2 NOT NULL,
+
+    CONSTRAINT calendar_events_type_chk
+        CHECK (
+            event_type IN (
+                N'MEETING',
+                N'EVENT',
+                N'DEADLINE',
+                N'REMINDER'
+            )
+        ),
+
+    CONSTRAINT calendar_events_created_by_fk
+        FOREIGN KEY (created_by)
+        REFERENCES users(id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT calendar_events_project_fk
+        FOREIGN KEY (project_id)
+        REFERENCES projects(id)
+        ON DELETE SET NULL
+);
+GO
+
+
+CREATE TABLE documents (
+    id NVARCHAR(255) PRIMARY KEY,
+    name NVARCHAR(255) NOT NULL,
+    file_name NVARCHAR(255) NOT NULL,
+    file_path NVARCHAR(MAX) NOT NULL,
+    file_type NVARCHAR(100) NOT NULL,
     file_size BIGINT NOT NULL,
-    uploaded_by TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
-    folder TEXT NOT NULL DEFAULT 'General',
-    created_at TIMESTAMPTZ NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL
+    uploaded_by NVARCHAR(255) NOT NULL,
+    project_id NVARCHAR(255),
+    folder NVARCHAR(255) NOT NULL DEFAULT N'General',
+    created_at DATETIME2 NOT NULL,
+    updated_at DATETIME2 NOT NULL,
+
+    CONSTRAINT documents_uploaded_by_fk
+        FOREIGN KEY (uploaded_by)
+        REFERENCES users(id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT documents_project_fk
+        FOREIGN KEY (project_id)
+        REFERENCES projects(id)
+        ON DELETE SET NULL
 );
+GO
 
-CREATE TABLE IF NOT EXISTS activities (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    action TEXT NOT NULL,
-    entity_type TEXT NOT NULL,
-    entity_id TEXT, -- Intentionally left without a foreign key (polymorphic relation)
-    subject TEXT NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL
+
+CREATE TABLE activities (
+    id NVARCHAR(255) PRIMARY KEY,
+    user_id NVARCHAR(255) NOT NULL,
+    action NVARCHAR(255) NOT NULL,
+    entity_type NVARCHAR(100) NOT NULL,
+    entity_id NVARCHAR(255),
+    subject NVARCHAR(255) NOT NULL,
+    created_at DATETIME2 NOT NULL,
+
+    CONSTRAINT activities_user_fk
+        FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE
 );
+GO
 
-CREATE TABLE IF NOT EXISTS notifications (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    title TEXT NOT NULL,
-    message TEXT NOT NULL,
-    type TEXT NOT NULL DEFAULT 'info',
-    is_read BOOLEAN NOT NULL DEFAULT false, -- SQLite INTEGER (0/1) mapped to BOOLEAN
-    created_at TIMESTAMPTZ NOT NULL
+
+CREATE TABLE notifications (
+    id NVARCHAR(255) PRIMARY KEY,
+    user_id NVARCHAR(255) NOT NULL,
+    title NVARCHAR(255) NOT NULL,
+    message NVARCHAR(MAX) NOT NULL,
+    type NVARCHAR(100) NOT NULL DEFAULT N'info',
+    is_read BIT NOT NULL DEFAULT 0,
+    created_at DATETIME2 NOT NULL,
+
+    CONSTRAINT notifications_user_fk
+        FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE
 );
+GO
 
-CREATE TABLE IF NOT EXISTS user_settings (
-    user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-    theme TEXT NOT NULL DEFAULT 'light',
-    notify_task_assignments BOOLEAN NOT NULL DEFAULT true, -- SQLite INTEGER mapped to BOOLEAN
-    notify_project_updates BOOLEAN NOT NULL DEFAULT true,  -- SQLite INTEGER mapped to BOOLEAN
-    notify_upcoming_meetings BOOLEAN NOT NULL DEFAULT true, -- SQLite INTEGER mapped to BOOLEAN
-    notify_deadline_reminders BOOLEAN NOT NULL DEFAULT true, -- SQLite INTEGER mapped to BOOLEAN
-    updated_at TIMESTAMPTZ NOT NULL
+
+CREATE TABLE user_settings (
+    user_id NVARCHAR(255) PRIMARY KEY,
+    theme NVARCHAR(50) NOT NULL DEFAULT N'light',
+    notify_task_assignments BIT NOT NULL DEFAULT 1,
+    notify_project_updates BIT NOT NULL DEFAULT 1,
+    notify_upcoming_meetings BIT NOT NULL DEFAULT 1,
+    notify_deadline_reminders BIT NOT NULL DEFAULT 1,
+    updated_at DATETIME2 NOT NULL,
+
+    CONSTRAINT user_settings_user_fk
+        FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE
 );
+GO
 
--- Indexes recreation
-CREATE INDEX IF NOT EXISTS password_reset_user_idx ON password_reset_tokens(user_id);
-CREATE INDEX IF NOT EXISTS session_user_idx ON sessions(user_id);
-CREATE INDEX IF NOT EXISTS tasks_project_idx ON tasks(project_id);
-CREATE INDEX IF NOT EXISTS tasks_assigned_idx ON tasks(assigned_to);
-CREATE INDEX IF NOT EXISTS project_members_user_idx ON project_members(user_id);
-CREATE INDEX IF NOT EXISTS activities_user_idx ON activities(user_id);
-CREATE INDEX IF NOT EXISTS notifications_user_idx ON notifications(user_id);
 
--- Verification queries to validate the created schema
-SELECT table_name 
-FROM information_schema.tables 
-WHERE table_schema = 'public' 
-  AND table_type = 'BASE TABLE'
-ORDER BY table_name;
+CREATE INDEX password_reset_user_idx
+ON password_reset_tokens(user_id);
+GO
 
-SELECT 
-    table_name, 
-    (xpath('/row/cnt/text()', xml_count))[1]::text::int as row_count
-FROM (
-    SELECT 
-        table_name, 
-        query_to_xml(format('SELECT count(*) as cnt FROM %I', table_name), false, true, '') as xml_count
-    FROM information_schema.tables 
-    WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
-) t
-ORDER BY table_name;
+CREATE INDEX session_user_idx
+ON sessions(user_id);
+GO
+
+CREATE INDEX tasks_project_idx
+ON tasks(project_id);
+GO
+
+CREATE INDEX tasks_assigned_idx
+ON tasks(assigned_to);
+GO
+
+CREATE INDEX project_members_user_idx
+ON project_members(user_id);
+GO
+
+CREATE INDEX activities_user_idx
+ON activities(user_id);
+GO
+
+CREATE INDEX notifications_user_idx
+ON notifications(user_id);
+GO
+
+
+SELECT
+    TABLE_NAME
+FROM INFORMATION_SCHEMA.TABLES
+WHERE TABLE_CATALOG = 'Northstar'
+  AND TABLE_SCHEMA = 'dbo'
+  AND TABLE_TYPE = 'BASE TABLE'
+ORDER BY TABLE_NAME;
+GO
+
+
+SELECT
+    t.name AS table_name,
+    SUM(p.rows) AS row_count
+FROM sys.tables t
+INNER JOIN sys.partitions p
+    ON t.object_id = p.object_id
+WHERE p.index_id IN (0, 1)
+GROUP BY t.name
+ORDER BY t.name;
+GO

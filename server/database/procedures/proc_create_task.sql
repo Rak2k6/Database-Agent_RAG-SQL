@@ -1,59 +1,106 @@
-CREATE OR REPLACE PROCEDURE proc_create_task(
-  p_id          TEXT,
-  p_title       TEXT,
-  p_project_id  TEXT,
-  p_creator_id  TEXT,
-  p_priority    TEXT,
-  p_status      TEXT,
-  p_due_date    TIMESTAMPTZ,
-  p_description TEXT DEFAULT '',
-  p_assigned_to TEXT DEFAULT NULL
+USE Northstar;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.proc_create_task
+(
+    @p_title        NVARCHAR(255),
+    @p_description  NVARCHAR(MAX) = NULL,
+    @p_status       NVARCHAR(100) = N'TODO',
+    @p_priority     NVARCHAR(100) = N'MEDIUM',
+    @p_due_date     DATETIME2(6) = NULL,
+    @p_project_id   NVARCHAR(255),
+    @p_assigned_to  NVARCHAR(255) = NULL,
+    @p_created_by   NVARCHAR(255),
+    @p_id           NVARCHAR(255) OUTPUT
 )
-LANGUAGE plpgsql
-AS $$
-DECLARE
-  v_project_name TEXT;
-  v_creator_name TEXT;
-  v_completed_at TIMESTAMPTZ;
+AS
 BEGIN
-  -- 1. Resolve project name for activity subject
-  SELECT name INTO v_project_name FROM projects WHERE id = p_project_id;
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'NOT_FOUND: project %', p_project_id;
-  END IF;
+    SET NOCOUNT ON;
 
-  -- 2. Compute completed_at
-  v_completed_at := CASE WHEN p_status = 'COMPLETED' THEN NOW() ELSE NULL END;
+    DECLARE @v_project_name NVARCHAR(255);
 
-  -- 3. Insert the task
-  INSERT INTO tasks (
-    id, title, description, project_id, assigned_to,
-    created_by, priority, status, due_date,
-    created_at, updated_at, completed_at
-  ) VALUES (
-    p_id, p_title, p_description, p_project_id, p_assigned_to,
-    p_creator_id, p_priority, p_status, p_due_date,
-    NOW(), NOW(), v_completed_at
-  );
+    SELECT @v_project_name = name
+    FROM dbo.projects
+    WHERE id = @p_project_id;
 
-  -- 4. Log activity
-  PERFORM fn_log_activity(
-    p_creator_id,
-    'created task',
-    'task',
-    p_id,
-    p_title || ' (' || COALESCE(v_project_name, 'Project') || ')'
-  );
+    IF @v_project_name IS NULL
+        THROW 50001, 'Project not found.', 1;
 
-  -- 5. Notify assignee if different from creator
-  IF p_assigned_to IS NOT NULL AND p_assigned_to <> p_creator_id THEN
-    SELECT name INTO v_creator_name FROM users WHERE id = p_creator_id;
-    PERFORM fn_create_notification(
-      p_assigned_to,
-      'New Task Assigned',
-      COALESCE(v_creator_name, 'Someone') || ' assigned you "' || p_title || '"',
-      'task'
+    SET @p_id =
+        N'task_' +
+        LEFT(
+            CONVERT(
+                VARCHAR(32),
+                HASHBYTES(
+                    'MD5',
+                    CAST(NEWID() AS NVARCHAR(36)) +
+                    CONVERT(NVARCHAR(30), SYSDATETIME())
+                ),
+                2
+            ),
+            9
+        );
+
+    DECLARE @v_completed_at DATETIME2(6) = NULL;
+
+    IF @p_status = N'COMPLETED'
+        SET @v_completed_at = SYSDATETIME();
+
+    INSERT INTO dbo.tasks
+    (
+        id,
+        title,
+        description,
+        status,
+        priority,
+        due_date,
+        project_id,
+        assigned_to,
+        created_by,
+        completed_at
+    )
+    VALUES
+    (
+        @p_id,
+        @p_title,
+        @p_description,
+        @p_status,
+        @p_priority,
+        @p_due_date,
+        @p_project_id,
+        @p_assigned_to,
+        @p_created_by,
+        @v_completed_at
     );
-  END IF;
+
+    DECLARE @v_activity_id NVARCHAR(255);
+
+    EXEC dbo.proc_log_activity
+        @p_user_id     = @p_created_by,
+        @p_action      = N'created a new task',
+        @p_entity_type = N'task',
+        @p_entity_id   = @p_id,
+        @p_subject     = @p_title,
+        @p_id          = @v_activity_id OUTPUT;
+
+    DECLARE @v_notification_id NVARCHAR(255);
+    DECLARE @v_notification_message NVARCHAR(MAX);
+
+    IF @p_assigned_to IS NOT NULL
+    BEGIN
+        SET @v_notification_message =
+            N'You have been assigned the task "' +
+            @p_title +
+            N'" in project "' +
+            @v_project_name +
+            N'".';
+
+        EXEC dbo.proc_create_notification
+            @p_user_id  = @p_assigned_to,
+            @p_title    = N'New Task Assigned',
+            @p_message  = @v_notification_message,
+            @p_type     = N'task',
+            @p_id       = @v_notification_id OUTPUT;
+    END;
 END;
-$$;
+GO

@@ -1,6 +1,6 @@
 # Northstar AI Workplace
 
-Existing Angular login design is preserved and now connects to a local Express authentication API. The API stores accounts in SQLite, hashes local passwords with bcrypt, verifies Google Identity tokens on the server, and issues revocable HttpOnly session cookies backed by hashed opaque session IDs. Dashboard content is demo data isolated from UI components in `WorkspaceService`.
+Existing Angular login design is preserved and now connects to a local Express authentication API. The API stores account and workplace data in PostgreSQL, hashes local passwords with bcrypt, verifies Google Identity tokens on the server, and issues revocable HttpOnly session cookies backed by hashed opaque session IDs. AI database questions use the same PostgreSQL database through a read-only query path. Dashboard content is demo data isolated from UI components in `WorkspaceService`.
 
 ## Run the demo
 
@@ -11,7 +11,7 @@ npm run api:dev
 npm start
 ```
 
-Open `http://localhost:4200/login`. Angular proxies `/api` to `http://localhost:3000`. SQLite is created at `server/data/northstar.sqlite` and is excluded from Git.
+Open `http://localhost:4200/login`. Angular proxies `/api` to `http://localhost:3000`. Set `PG_URI` for the PostgreSQL connection. The existing `server/data/northstar.sqlite` file is retained as a rollback/reference backup and is excluded from Git.
 
 The demo no longer contains hardcoded frontend credentials. Create an account at `/signup`, or use forgot password to exercise the documented mock reset flow. Dashboard access is protected; successful signup/login redirects to `/dashboard`.
 
@@ -38,7 +38,7 @@ Google sign-in is implemented with Google Identity Services. Set the OAuth **Web
 
 ## Environment and production notes
 
-Copy `.env.example` to `.env` for local API configuration. `WEB_ORIGIN` configures allowed browser origins, and `DB_PATH` selects persistent storage. Set `NODE_ENV=production` behind HTTPS so session cookies are Secure. `API_URL` in the Angular environment should be the same-origin API path or deployment API base URL.
+Copy `.env.example` to `.env` for local API configuration. `PG_URI` configures PostgreSQL and `WEB_ORIGIN` configures allowed browser origins. `DB_PATH` is retained only for the standalone legacy SQLite compatibility code; the API and AI query path use PostgreSQL. Set `NODE_ENV=production` behind HTTPS so session cookies are Secure. `API_URL` in the Angular environment should be the same-origin API path or deployment API base URL.
 
 Password hashes, reset-token hashes, Google IDs, and database rows stay in the server. API responses only include the public user profile. Session credentials are HttpOnly, SameSite=Lax cookies; the server stores only session hashes and revokes sessions at logout and password reset. Angular sends cookies through a credentialed interceptor. Deploy with HTTPS, a managed database/backups, CSRF/origin policy appropriate to the domain, monitoring, and secrets management before production use.
 
