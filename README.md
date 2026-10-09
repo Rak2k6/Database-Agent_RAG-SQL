@@ -22,6 +22,7 @@ The demo no longer contains hardcoded frontend credentials. Create an account at
 - `/forgot-password` and `/reset-password/:token` use one-hour, single-use, SHA-256-hashed tokens.
 - `/dashboard`, `/projects`, `/tasks`, `/team`, `/calendar`, `/documents`, `/reports`, and `/settings` require an active session.
 - `/api/auth/login`, `/signup`, `/google`, `/forgot-password`, `/reset-password`, `/logout`, and `/me` provide the auth API. `/api/health` is a health check.
+- Authenticated `POST /api/documents` accepts multipart PDF, DOCX, or `.md` uploads (up to 20 MB) and stores files in `server/uploads/`; document metadata continues through `dbo.proc_create_document`.
 
 Run frontend tests/build and backend typecheck:
 

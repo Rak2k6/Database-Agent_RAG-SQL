@@ -1,7 +1,9 @@
 import { CommonModule } from '@angular/common';
-import { Component, ElementRef, HostListener, ViewChild, inject, signal } from '@angular/core';
+import { Component, ElementRef, HostListener, Input, ViewChild, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { AiChatService, AiChatSource } from './ai-chat.service';
+import { RouterLink } from '@angular/router';
+import { Subscription } from 'rxjs';
+import { AiChatService, AiChatSource, AiChatTable } from './ai-chat.service';
 
 interface ChatMessage {
   id: string;
@@ -9,18 +11,24 @@ interface ChatMessage {
   content: string;
   source?: AiChatSource | AiChatSource[];
   sources?: AiChatSource[];
+  table?: AiChatTable;
   timestamp: Date;
 }
 
 @Component({
   selector: 'app-ai-chat',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, RouterLink],
   templateUrl: './ai-chat.component.html',
   styleUrl: './ai-chat.component.scss',
+  host: { '[class.embedded-host]': 'embedded' },
 })
 export class AiChatComponent {
   private readonly chat = inject(AiChatService);
+  private readonly greetingMessageId = crypto.randomUUID();
+  private request?: Subscription;
+
+  @Input() embedded = true;
 
   @ViewChild('composer') private composer?: ElementRef<HTMLTextAreaElement>;
   @ViewChild('messageList') private messageList?: ElementRef<HTMLDivElement>;
@@ -31,7 +39,7 @@ export class AiChatComponent {
   protected readonly draft = signal('');
   protected readonly messages = signal<ChatMessage[]>([
     {
-      id: crypto.randomUUID(),
+      id: this.greetingMessageId,
       role: 'assistant',
       content: "Hello! I'm Northstar AI. Ask me about projects, tasks, people, or events in your workspace.",
       timestamp: new Date(),
@@ -52,6 +60,33 @@ export class AiChatComponent {
     'What meetings are scheduled today?',
     'What are the upcoming events?',
   ];
+
+  protected readonly pageSuggestions = [
+    'How many active projects are there?',
+    'Show my tasks',
+    'What are the latest project updates?',
+    'Who has the most tasks?',
+    'Show upcoming events',
+  ];
+
+  protected showWelcome(): boolean {
+    return this.embedded
+      && (this.messages().length === 0 || (this.messages().length === 1 && this.messages()[0].id === this.greetingMessageId));
+  }
+
+  protected shouldDisplayMessage(message: ChatMessage): boolean {
+    return !this.embedded || message.id !== this.greetingMessageId;
+  }
+
+  protected newChat(): void {
+    this.request?.unsubscribe();
+    this.request = undefined;
+    this.sending.set(false);
+    this.draft.set('');
+    this.messages.set([]);
+    this.scrollToLatest();
+    setTimeout(() => this.composer?.nativeElement.focus());
+  }
 
   protected togglePanel(): void {
     if (this.isOpen()) {
@@ -85,11 +120,11 @@ export class AiChatComponent {
     this.sending.set(true);
     this.scrollToLatest();
 
-    this.chat.sendMessage(content).subscribe({
+    this.request = this.chat.sendMessage(content).subscribe({
       next: (response) => {
         this.messages.update((messages) => [
           ...messages,
-          this.createMessage('assistant', response.answer || 'I could not find an answer for that request.', response.source, response.sources),
+          this.createMessage('assistant', response.answer || 'I could not find an answer for that request.', response.source, response.sources, response.table),
         ]);
         this.sending.set(false);
         this.scrollToLatest();
@@ -101,6 +136,9 @@ export class AiChatComponent {
         ]);
         this.sending.set(false);
         this.scrollToLatest();
+      },
+      complete: () => {
+        this.request = undefined;
       },
     });
   }
@@ -120,7 +158,7 @@ export class AiChatComponent {
 
   @HostListener('document:keydown.escape')
   protected onEscape(): void {
-    if (this.isOpen()) this.closePanel();
+    if (!this.embedded && this.isOpen()) this.closePanel();
   }
 
   private createMessage(
@@ -128,8 +166,36 @@ export class AiChatComponent {
     content: string,
     source?: AiChatSource | AiChatSource[],
     sources?: AiChatSource[],
+    table?: AiChatTable,
   ): ChatMessage {
-    return { id: crypto.randomUUID(), role, content, source, sources, timestamp: new Date() };
+    return { id: crypto.randomUUID(), role, content, source, sources, table, timestamp: new Date() };
+  }
+
+  protected tableHeaders(message: ChatMessage): string[] {
+    return message.table?.columns ?? [];
+  }
+
+  protected tableRows(message: ChatMessage): unknown[][] {
+    return message.table?.rows ?? [];
+  }
+
+  protected hasTable(message: ChatMessage): boolean {
+    const table = message.table;
+    return !!table && table.columns.length > 0 && table.rows.length > 0;
+  }
+
+  protected cellText(value: unknown): string {
+    if (value === null || value === undefined) return '—';
+    if (value instanceof Date) return value.toLocaleString();
+    if (typeof value === 'object') return JSON.stringify(value);
+    return String(value);
+  }
+
+  protected headerText(column: string): string {
+    return column
+      .replaceAll('_', ' ')
+      .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+      .replace(/\b\w/g, (letter) => letter.toUpperCase());
   }
 
   private scrollToLatest(): void {

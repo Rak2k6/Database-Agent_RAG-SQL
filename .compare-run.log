@@ -1,0 +1,780 @@
+﻿node : Γùç injected env (0) from .env
+    + CategoryInfo          : NotSpecified: (Γùç 
+    injected env (0) from .env:String) [], Remo  
+  teException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+Connected to SQL Server: LAPTOP-AKH44TSK / Northstar
+
+
+=== show all tasks ===
+[SQL BOT] pipeline: legacy
+[AI] SQL generation: 1040 ms
+[DB] SQL Server execution: 17 ms
+[SQL BOT] Plan: {
+  intent: 'list',
+  entity: 'tasks',
+  filters: [],
+  dataContract: { fields: [ [Object] ] },
+  requestedFields: [ 'title' ],
+  presentation: 'list',
+  presentationContract: { mode: 'list', reason: 'entity result', explicit: false },
+  useTable: false
+}
+[SQL BOT] Generated SQL: SELECT title FROM dbo.tasks
+[SQL BOT] Result columns: [ 'title' ]
+[SQL BOT] First row: {
+  title: 'Define project requirements ΓÇö Customer Intelligence Platform'
+}
+[legacy] safety=true exec=true rows=82
+  sql: SELECT title FROM dbo.tasks
+  columns: title
+  answer: - Define project requirements ΓÇö Customer Intelligence Platform - Finalize technical architecture ΓÇö Customer Intelligence Platform - Set up dΓÇª
+[SQL BOT] pipeline: llm_first
+[SQL BOT][llm_first] pipeline=llm_first question="show all tasks"
+[SQL BOT][llm_first] llm_ms=2709
+[DB] SQL Server execution: 24 ms
+[SQL BOT][llm_first] outcome=executed columns=["id","title","description","status","priority","due_date","assigned_to","project_id","created_at","updated_at"] rows=82
+[SQL BOT][llm_first] sql=SELECT t.id AS id, t.title AS title, t.description AS description, t.status AS status, t.priority AS priority, t.due_date AS due_date, t.assigned_to AS assigned_to, t.project_id AS project_id, t.created_at AS created_at, t.updated_at AS updated_at FROM dbo.tasks AS t
+[llm_first] safety=true exec=true rows=82
+  sql: SELECT t.id AS id, t.title AS title, t.description AS description, t.status AS status, t.priority AS priority, t.due_date AS due_date, t.assigned_to AS assigned_to, t.project_id AS project_id, t.creatΓÇª
+  columns: id, title, description, status, priority, due_date, assigned_to, project_id, created_at, updated_at
+  answer: Here are the results.
+
+=== show all users ===
+[SQL BOT] pipeline: legacy
+[AI] SQL generation: 828 ms
+[DB] SQL Server execution: 11 ms
+[SQL BOT] Plan: {
+  intent: 'list',
+  entity: 'team members',
+  filters: [],
+  dataContract: { fields: [ [Object] ] },
+  requestedFields: [ 'name' ],
+  presentation: 'list',
+  presentationContract: { mode: 'list', reason: 'entity result', explicit: false },
+  useTable: false
+}
+[SQL BOT] Generated SQL: SELECT name FROM dbo.users
+[SQL BOT] Result columns: [ 'name' ]
+[SQL BOT] First row: { name: 'Rakesh' }
+[legacy] safety=true exec=true rows=17
+  sql: SELECT name FROM dbo.users
+  columns: name
+  answer: - Rakesh - rak rakesh - Session Test - Taylor Enterprise - Rakesh - John - API Check User - Recovery Flow User - rak - Alex Morgan - Chris EΓÇª
+[SQL BOT] pipeline: llm_first
+[SQL BOT][llm_first] pipeline=llm_first question="show all users"
+[SQL BOT][llm_first] llm_ms=1781
+[DB] SQL Server execution: 9 ms
+[SQL BOT][llm_first] outcome=executed columns=["id","name","email","role","department","status","created_at"] rows=17
+[SQL BOT][llm_first] sql=SELECT u.id AS id, u.name AS name, u.email AS email, u.role AS role, u.department AS department, u.status AS status, u.created_at AS created_at FROM dbo.users AS u ORDER BY u.name ASC
+[llm_first] safety=true exec=true rows=17
+  sql: SELECT u.id AS id, u.name AS name, u.email AS email, u.role AS role, u.department AS department, u.status AS status, u.created_at AS created_at FROM dbo.users AS u ORDER BY u.name ASC
+  columns: id, name, email, role, department, status, created_at
+  answer: Here are the results.
+
+=== list all users ===
+[SQL BOT] pipeline: legacy
+[AI] SQL generation: 852 ms
+[DB] SQL Server execution: 8 ms
+[SQL BOT] Plan: {
+  intent: 'list',
+  entity: 'team members',
+  filters: [],
+  dataContract: { fields: [ [Object] ] },
+  requestedFields: [ 'name' ],
+  presentation: 'list',
+  presentationContract: { mode: 'list', reason: 'explicit list request', explicit: true },
+  useTable: false
+}
+[SQL BOT] Generated SQL: SELECT name FROM dbo.users
+[SQL BOT] Result columns: [ 'name' ]
+[SQL BOT] First row: { name: 'Rakesh' }
+[legacy] safety=true exec=true rows=17
+  sql: SELECT name FROM dbo.users
+  columns: name
+  answer: - Rakesh - rak rakesh - Session Test - Taylor Enterprise - Rakesh - John - API Check User - Recovery Flow User - rak - Alex Morgan - Chris EΓÇª
+[SQL BOT] pipeline: llm_first
+[SQL BOT][llm_first] pipeline=llm_first question="list all users"
+[SQL BOT][llm_first] llm_ms=1859
+[DB] SQL Server execution: 16 ms
+[SQL BOT][llm_first] outcome=executed columns=["id","name","email","role","department","status","created_at","updated_at"] rows=17
+[SQL BOT][llm_first] sql=SELECT u.id AS id, u.name AS name, u.email AS email, u.role AS role, u.department AS department, u.status AS status, u.created_at AS created_at, u.updated_at AS updated_at FROM dbo.users u ORDER BY u.name ASC
+[llm_first] safety=true exec=true rows=17
+  sql: SELECT u.id AS id, u.name AS name, u.email AS email, u.role AS role, u.department AS department, u.status AS status, u.created_at AS created_at, u.updated_at AS updated_at FROM dbo.users u ORDER BY u.ΓÇª
+  columns: id, name, email, role, department, status, created_at, updated_at
+  answer: - Alex Morgan - API Check User - Chris Evans - John - Jordan Lee - Maya Lin - Morgan Reed - Rak - rak - rak rakesh - Rakesh - Rakesh - RecovΓÇª
+
+=== list all the details of the users ===
+[SQL BOT] pipeline: legacy
+[AI] SQL generation: 824 ms
+[DB] SQL Server execution: 9 ms
+[SQL BOT] Plan: {
+  intent: 'list',
+  entity: 'team members',
+  filters: [],
+  dataContract: { fields: [ [Object], [Object], [Object], [Object] ] },
+  requestedFields: [ 'name', 'role', 'department', 'status' ],
+  presentation: 'list',
+  presentationContract: { mode: 'list', reason: 'explicit list request', explicit: true },
+  useTable: false
+}
+[SQL BOT] Generated SQL: SELECT id, name, email, role, department, status, created_at, updated_at FROM dbo.users
+[SQL BOT] Result columns: [
+  'id',
+  'name',
+  'email',
+  'role',
+  'department',
+  'status',
+  'created_at',
+  'updated_at'
+]
+[SQL BOT] First row: {
+  id: '388e5b99-06f1-4605-a88e-998d2f90d317',
+  name: 'Rakesh',
+  email: 'rakesh.b@northstarai.com',
+  role: 'Member',
+  department: 'Engineering',
+  status: 'Active',
+  created_at: 2026-10-01T12:17:35.407Z { nanosecondsDelta: 0 },
+  updated_at: 2026-10-01T12:17:35.407Z { nanosecondsDelta: 0 }
+}
+[legacy] safety=true exec=true rows=17
+  sql: SELECT id, name, email, role, department, status, created_at, updated_at FROM dbo.users
+  columns: id, name, email, role, department, status, created_at, updated_at
+  answer: - Rakesh - rak rakesh - Session Test - Taylor Enterprise - Rakesh - John - API Check User - Recovery Flow User - rak - Alex Morgan - Chris EΓÇª
+[SQL BOT] pipeline: llm_first
+[SQL BOT][llm_first] pipeline=llm_first question="list all the details of the users"
+[SQL BOT][llm_first] llm_ms=9147
+[DB] SQL Server execution: 12 ms
+[SQL BOT][llm_first] outcome=executed columns=["id","name","email","role","department","status","created_at","updated_at"] rows=17
+[SQL BOT][llm_first] sql=SELECT u.id AS id, u.name AS name, u.email AS email, u.role AS role, u.department AS department, u.status AS status, u.created_at AS created_at, u.updated_at AS updated_at FROM dbo.users u
+[llm_first] safety=true exec=true rows=17
+  sql: SELECT u.id AS id, u.name AS name, u.email AS email, u.role AS role, u.department AS department, u.status AS status, u.created_at AS created_at, u.updated_at AS updated_at FROM dbo.users u
+  columns: id, name, email, role, department, status, created_at, updated_at
+  answer: Here are the results.
+
+=== list the tasks assigned to Jordan Lee ===
+[SQL BOT] pipeline: legacy
+[DB] SQL Server execution: 10 ms
+  [retry] Groq rate limit; waiting 20s before one retryΓÇª
+[SQL BOT] pipeline: legacy
+[DB] SQL Server execution: 11 ms
+[AI] SQL generation: 1419 ms
+[DB] SQL Server execution: 12 ms
+[SQL BOT] Plan: {
+  intent: 'person_workload',
+  entity: 'tasks',
+  subject: 'Jordan Lee',
+  personReference: 'Jordan Lee',
+  filters: [ 'assigned_to = usr_jordan' ],
+  dataContract: { fields: [ [Object], [Object] ] },
+  requestedFields: [ 'title', 'status' ],
+  presentation: 'list',
+  presentationContract: { mode: 'list', reason: 'explicit list request', explicit: true },
+  useTable: false,
+  resolvedPersonId: 'usr_jordan',
+  resolvedPersonName: 'Jordan Lee'
+}
+[SQL BOT] Generated SQL: SELECT t.title, t.status FROM dbo.tasks t JOIN dbo.users u ON t.assigned_to = u.id WHERE u.name = 'Jordan Lee'
+[SQL BOT] Result columns: [ 'title', 'status' ]
+[SQL BOT] First row: {
+  title: 'Define project requirements ΓÇö Customer Intelligence Platform',
+  status: 'COMPLETED'
+}
+[legacy] safety=true exec=true rows=14
+  sql: SELECT t.title, t.status FROM dbo.tasks t JOIN dbo.users u ON t.assigned_to = u.id WHERE u.name = 'Jordan Lee'
+  columns: title, status
+  answer: - Define project requirements ΓÇö Customer Intelligence Platform - Create automated test suite ΓÇö Customer Intelligence Platform - Build fronteΓÇª
+[SQL BOT] pipeline: llm_first
+[SQL BOT][llm_first] pipeline=llm_first question="list the tasks assigned to Jordan Lee"
+[SQL BOT][llm_first] llm_ms=2553
+[DB] SQL Server execution: 11 ms
+[DB] SQL Server execution: 17 ms
+[SQL BOT][llm_first] outcome=executed columns=["title","description","status","priority","due_date","project_name"] rows=14
+[SQL BOT][llm_first] sql=SELECT t.title AS title, t.description AS description, t.status AS status, t.priority AS priority, t.due_date AS due_date, p.name AS project_name FROM dbo.tasks t LEFT JOIN dbo.projects p ON t.project_id = p.id WHERE t.assigned_to = N'usr_jordan' ORDER BY t.due_date ASC
+[llm_first] safety=true exec=true rows=14
+  sql: SELECT t.title AS title, t.description AS description, t.status AS status, t.priority AS priority, t.due_date AS due_date, p.name AS project_name FROM dbo.tasks t LEFT JOIN dbo.projects p ON t.projectΓÇª
+  columns: title, description, status, priority, due_date, project_name
+  answer: Here are the results.
+
+=== tasks assigned to Jordan ===
+[SQL BOT] pipeline: legacy
+[DB] SQL Server execution: 11 ms
+[AI] SQL generation: 1143 ms
+[DB] SQL Server execution: 10 ms
+[SQL BOT] Plan: {
+  intent: 'person_workload',
+  entity: 'tasks',
+  subject: 'Jordan Lee',
+  personReference: 'Jordan',
+  filters: [ 'assigned_to = usr_jordan' ],
+  dataContract: { fields: [ [Object], [Object] ] },
+  requestedFields: [ 'title', 'status' ],
+  presentation: 'list',
+  presentationContract: { mode: 'list', reason: 'entity result', explicit: false },
+  useTable: false,
+  resolvedPersonId: 'usr_jordan',
+  resolvedPersonName: 'Jordan Lee'
+}
+[SQL BOT] Generated SQL: SELECT t.title AS Task, t.status AS Status FROM dbo.tasks t WHERE t.assigned_to = 'usr_jordan'
+[SQL BOT] Result columns: [ 'Task', 'Status' ]
+[SQL BOT] First row: {
+  Task: 'Define project requirements ΓÇö Customer Intelligence Platform',
+  Status: 'COMPLETED'
+}
+[legacy] safety=true exec=true rows=14
+  sql: SELECT t.title AS Task, t.status AS Status FROM dbo.tasks t WHERE t.assigned_to = 'usr_jordan'
+  columns: Task, Status
+  answer: The requested information (title) is unavailable, so I will not guess at it.
+[SQL BOT] pipeline: llm_first
+[SQL BOT][llm_first] pipeline=llm_first question="tasks assigned to Jordan"
+[SQL BOT][llm_first] llm_ms=13549
+[DB] SQL Server execution: 5 ms
+[DB] SQL Server execution: 21 ms
+[SQL BOT][llm_first] outcome=executed columns=["title","status","due_date","project_name"] rows=14
+[SQL BOT][llm_first] sql=SELECT t.title AS title, t.status AS status, t.due_date AS due_date, p.name AS project_name FROM dbo.tasks t JOIN dbo.projects p ON t.project_id = p.id WHERE t.assigned_to = N'usr_jordan' ORDER BY t.due_date ASC
+[llm_first] safety=true exec=true rows=14
+  sql: SELECT t.title AS title, t.status AS status, t.due_date AS due_date, p.name AS project_name FROM dbo.tasks t JOIN dbo.projects p ON t.project_id = p.id WHERE t.assigned_to = N'usr_jordan' ORDER BY t.dΓÇª
+  columns: title, status, due_date, project_name
+  answer: Here are the results.
+
+=== select the top 5 priority tasks ===
+[SQL BOT] pipeline: legacy
+[AI] SQL generation: 3289 ms
+[DB] SQL Server execution: 7 ms
+[SQL BOT] Plan: {
+  intent: 'ranking',
+  entity: 'tasks',
+  filters: [],
+  dataContract: { fields: [ [Object], [Object] ] },
+  requestedFields: [ 'title', 'priority' ],
+  presentation: 'table',
+  presentationContract: { mode: 'table', reason: 'structured result', explicit: false },
+  useTable: true,
+  limit: 5,
+  sort: { field: 'priority', direction: 'desc' }
+}
+[SQL BOT] Generated SQL: SELECT TOP 5 t.title, t.priority FROM dbo.tasks t ORDER BY t.priority DESC
+[SQL BOT] Result columns: [ 'title', 'priority' ]
+[SQL BOT] First row: {
+  title: 'Set up development environment ΓÇö Customer Intelligence Platform',
+  priority: 'MEDIUM'
+}
+[legacy] safety=true exec=true rows=5
+  sql: SELECT TOP 5 t.title, t.priority FROM dbo.tasks t ORDER BY t.priority DESC
+  columns: title, priority
+  answer: Here are the results.
+[SQL BOT] pipeline: llm_first
+[SQL BOT][llm_first] pipeline=llm_first question="select the top 5 priority tasks"
+[SQL BOT][llm_first] llm_ms=13462
+[DB] SQL Server execution: 17 ms
+[SQL BOT][llm_first] outcome=executed columns=["id","title","priority","status","due_date"] rows=5
+[SQL BOT][llm_first] sql=SELECT TOP 5 t.id AS id, t.title AS title, t.priority AS priority, t.status AS status, t.due_date AS due_date FROM dbo.tasks t ORDER BY CASE WHEN t.priority = 'HIGH' THEN 1 WHEN t.priority = 'MEDIUM' THEN 2 ELSE 3 END ASC
+[llm_first] safety=true exec=true rows=5
+  sql: SELECT TOP 5 t.id AS id, t.title AS title, t.priority AS priority, t.status AS status, t.due_date AS due_date FROM dbo.tasks t ORDER BY CASE WHEN t.priority = 'HIGH' THEN 1 WHEN t.priority = 'MEDIUM' ΓÇª
+  columns: id, title, priority, status, due_date
+  answer: Here are the results.
+
+=== highest priority tasks ===
+[SQL BOT] pipeline: legacy
+[AI] SQL generation: 5305 ms
+[DB] SQL Server execution: 14 ms
+[SQL BOT] Plan: {
+  intent: 'ranking',
+  entity: 'tasks',
+  filters: [],
+  dataContract: { fields: [ [Object], [Object] ] },
+  requestedFields: [ 'title', 'priority' ],
+  presentation: 'table',
+  presentationContract: { mode: 'table', reason: 'structured result', explicit: false },
+  useTable: true,
+  sort: { field: 'priority', direction: 'desc' }
+}
+[SQL BOT] Generated SQL: SELECT t.title, t.priority
+FROM dbo.tasks AS t
+WHERE t.priority = 'HIGH'
+ORDER BY CASE t.priority WHEN 'HIGH' THEN 3 WHEN 'MEDIUM' THEN 2 WHEN 'LOW' THEN 1 END DESC
+[SQL BOT] Result columns: [ 'title', 'priority' ]
+[SQL BOT] First row: {
+  title: 'Implement backend API ΓÇö Customer Intelligence Platform',
+  priority: 'HIGH'
+}
+[legacy] safety=true exec=true rows=35
+  sql: SELECT t.title, t.priority FROM dbo.tasks AS t WHERE t.priority = 'HIGH' ORDER BY CASE t.priority WHEN 'HIGH' THEN 3 WHEN 'MEDIUM' THEN 2 WHEN 'LOW' THEN 1 END DESC
+  columns: title, priority
+  answer: Here are the results.
+[SQL BOT] pipeline: llm_first
+[SQL BOT][llm_first] pipeline=llm_first question="highest priority tasks"
+[SQL BOT][llm_first] llm_ms=7210
+[DB] SQL Server execution: 25 ms
+[SQL BOT][llm_first] outcome=executed columns=["id","title","priority","due_date","status"] rows=35
+[SQL BOT][llm_first] sql=SELECT t.id AS id, t.title AS title, t.priority AS priority, t.due_date AS due_date, t.status AS status FROM dbo.tasks AS t WHERE t.priority = 'HIGH' ORDER BY t.due_date ASC
+[llm_first] safety=true exec=true rows=35
+  sql: SELECT t.id AS id, t.title AS title, t.priority AS priority, t.due_date AS due_date, t.status AS status FROM dbo.tasks AS t WHERE t.priority = 'HIGH' ORDER BY t.due_date ASC
+  columns: id, title, priority, due_date, status
+  answer: - Setup automated API regression test suite - Implement Google Identity GIS token validation - Refactor database indexing strategy - FinalizΓÇª
+
+=== team members in Brand Evolution ===
+[SQL BOT] pipeline: legacy
+[DB] SQL Server execution: 15 ms
+[AI] SQL generation: 4926 ms
+[DB] SQL Server execution: 13 ms
+[SQL BOT] Plan: {
+  intent: 'relationship_lookup',
+  entity: 'project members',
+  projectReference: 'Brand Evolution',
+  nameFilter: undefined,
+  filters: [ 'project_id = proj_brand' ],
+  dataContract: { fields: [ [Object] ] },
+  requestedFields: [ 'name' ],
+  presentation: 'table',
+  presentationContract: { mode: 'table', reason: 'structured result', explicit: false },
+  useTable: true,
+  resolvedProjectId: 'proj_brand',
+  resolvedProjectName: 'Brand Evolution'
+}
+[SQL BOT] Generated SQL: SELECT u.name AS Member
+FROM dbo.project_members pm
+JOIN dbo.users u ON pm.user_id = u.id
+JOIN dbo.projects p ON pm.project_id = p.id
+WHERE p.name = 'Brand Evolution'
+[SQL BOT] Result columns: [ 'Member' ]
+[SQL BOT] First row: { Member: 'Alex Morgan' }
+[legacy] safety=true exec=true rows=4
+  sql: SELECT u.name AS Member FROM dbo.project_members pm JOIN dbo.users u ON pm.user_id = u.id JOIN dbo.projects p ON pm.project_id = p.id WHERE p.name = 'Brand Evolution'
+  columns: Member
+  answer: The requested information (name) is unavailable, so I will not guess at it.
+[SQL BOT] pipeline: llm_first
+[SQL BOT][llm_first] pipeline=llm_first question="team members in Brand Evolution"
+[SQL BOT][llm_first] llm_ms=13393
+[DB] SQL Server execution: 17 ms
+[DB] SQL Server execution: 24 ms
+[SQL BOT][llm_first] outcome=executed columns=[] rows=0
+[SQL BOT][llm_first] sql=SELECT u.name AS name, pm.role AS role, u.email AS email FROM dbo.project_members pm JOIN dbo.users u ON pm.user_id = u.id JOIN dbo.projects p ON pm.project_id = p.id WHERE p.name = N'proj_brand' ORDER BY u.name ASC
+[llm_first] safety=true exec=true rows=0
+  sql: SELECT u.name AS name, pm.role AS role, u.email AS email FROM dbo.project_members pm JOIN dbo.users u ON pm.user_id = u.id JOIN dbo.projects p ON pm.project_id = p.id WHERE p.name = N'proj_brand' ORDEΓÇª
+  columns: (none)
+  answer: No project members matched your request.
+
+=== team members for Customer Intelligence ===
+[SQL BOT] pipeline: legacy
+[DB] SQL Server execution: 13 ms
+[AI] SQL generation: 13153 ms
+[DB] SQL Server execution: 10 ms
+[SQL BOT] Plan: {
+  intent: 'relationship_lookup',
+  entity: 'project members',
+  projectReference: 'Customer Intelligence',
+  nameFilter: undefined,
+  filters: [ 'project_id = proj_intelligence' ],
+  dataContract: { fields: [ [Object] ] },
+  requestedFields: [ 'name' ],
+  presentation: 'table',
+  presentationContract: { mode: 'table', reason: 'structured result', explicit: false },
+  useTable: true,
+  resolvedProjectId: 'proj_intelligence',
+  resolvedProjectName: 'Customer Intelligence'
+}
+[SQL BOT] Generated SQL: SELECT u.name AS name
+FROM dbo.project_members pm
+JOIN dbo.projects p ON pm.project_id = p.id
+JOIN dbo.users u ON pm.user_id = u.id
+WHERE p.name = 'Customer Intelligence'
+[SQL BOT] Result columns: [ 'name' ]
+[SQL BOT] First row: { name: 'Maya Lin' }
+[legacy] safety=true exec=true rows=3
+  sql: SELECT u.name AS name FROM dbo.project_members pm JOIN dbo.projects p ON pm.project_id = p.id JOIN dbo.users u ON pm.user_id = u.id WHERE p.name = 'Customer Intelligence'
+  columns: name
+  answer: - Maya Lin - Morgan Reed - Sam Kim
+[SQL BOT] pipeline: llm_first
+[SQL BOT][llm_first] pipeline=llm_first question="team members for Customer Intelligence"
+[SQL BOT][llm_first] llm_ms=14826
+[DB] SQL Server execution: 9 ms
+[DB] SQL Server execution: 12 ms
+[SQL BOT][llm_first] outcome=executed columns=["user_name","email","role"] rows=3
+[SQL BOT][llm_first] sql=SELECT u.name AS user_name, u.email AS email, pm.role AS role FROM dbo.project_members pm JOIN dbo.users u ON pm.user_id = u.id WHERE pm.project_id = N'proj_intelligence' ORDER BY u.name ASC
+[llm_first] safety=true exec=true rows=3
+  sql: SELECT u.name AS user_name, u.email AS email, pm.role AS role FROM dbo.project_members pm JOIN dbo.users u ON pm.user_id = u.id WHERE pm.project_id = N'proj_intelligence' ORDER BY u.name ASC
+  columns: user_name, email, role
+  answer: Here are the results.
+
+=== latest project updates ===
+[SQL BOT] pipeline: legacy
+[AI] SQL generation: 4977 ms
+[DB] SQL Server execution: 18 ms
+[SQL BOT] Plan: {
+  intent: 'recent_activity',
+  entity: 'activities',
+  filters: [ 'ordered by created_at descending' ],
+  dataContract: {
+    fields: [ [Object], [Object], [Object], [Object], [Object], [Object] ]
+  },
+  requestedFields: [
+    'action',
+    'user_name',
+    'entity_type',
+    'subject',
+    'created_at',
+    'project_name'
+  ],
+  presentation: 'table',
+  presentationContract: { mode: 'table', reason: 'structured result', explicit: false },
+  useTable: true,
+  sort: { field: 'created_at', direction: 'desc' }
+}
+[SQL BOT] Generated SQL: SELECT a.action, u.name AS user_name, a.entity_type, a.subject, a.created_at, p.name AS project_name
+FROM dbo.activities a
+JOIN dbo.users u ON u.id = a.user_id
+JOIN dbo.projects p ON p.id = a.entity_id
+WHERE a.entity_type = 'Project'
+ORDER BY a.created_at DESC
+[SQL BOT] Result columns: [
+  'action',
+  'user_name',
+  'entity_type',
+  'subject',
+  'created_at',
+  'project_name'
+]
+[SQL BOT] First row: {
+  action: 'created a new project',
+  user_name: 'Rakesh',
+  entity_type: 'project',
+  subject: 'Turf Management',
+  created_at: 2026-10-05T15:45:04.480Z { nanosecondsDelta: 0.000846 },
+  project_name: 'Turf Management'
+}
+[legacy] safety=true exec=true rows=15
+  sql: SELECT a.action, u.name AS user_name, a.entity_type, a.subject, a.created_at, p.name AS project_name FROM dbo.activities a JOIN dbo.users u ON u.id = a.user_id JOIN dbo.projects p ON p.id = a.entity_iΓÇª
+  columns: action, user_name, entity_type, subject, created_at, project_name
+  answer: Here are the results.
+[SQL BOT] pipeline: llm_first
+[SQL BOT][llm_first] pipeline=llm_first question="latest project updates"
+[SQL BOT][llm_first] llm_ms=7560
+[DB] SQL Server execution: 13 ms
+[SQL BOT][llm_first] outcome=executed columns=["project_name","action","subject","created_at"] rows=10
+[SQL BOT][llm_first] sql=SELECT TOP 10 p.name AS project_name, a.action AS action, a.subject AS subject, a.created_at AS created_at FROM dbo.activities a JOIN dbo.projects p ON a.entity_id = p.id WHERE a.entity_type = 'PROJECT' ORDER BY a.created_at DESC
+[llm_first] safety=true exec=true rows=10
+  sql: SELECT TOP 10 p.name AS project_name, a.action AS action, a.subject AS subject, a.created_at AS created_at FROM dbo.activities a JOIN dbo.projects p ON a.entity_id = p.id WHERE a.entity_type = 'PROJECΓÇª
+  columns: project_name, action, subject, created_at
+  answer: Here are the results.
+
+=== recent activities ===
+[SQL BOT] pipeline: legacy
+[AI] SQL generation: 13056 ms
+[DB] SQL Server execution: 12 ms
+[SQL BOT] Plan: {
+  intent: 'recent_activity',
+  entity: 'activities',
+  filters: [ 'ordered by created_at descending' ],
+  dataContract: { fields: [ [Object], [Object], [Object], [Object], [Object] ] },
+  requestedFields: [ 'action', 'user_name', 'entity_type', 'subject', 'created_at' ],
+  presentation: 'list',
+  presentationContract: { mode: 'list', reason: 'entity result', explicit: false },
+  useTable: false,
+  sort: { field: 'created_at', direction: 'desc' }
+}
+[SQL BOT] Generated SQL: SELECT a.action, u.name AS user_name, a.entity_type, a.subject, a.created_at
+FROM dbo.activities a
+JOIN dbo.users u ON a.user_id = u.id
+ORDER BY a.created_at DESC
+[SQL BOT] Result columns: [ 'action', 'user_name', 'entity_type', 'subject', 'created_at' ]
+[SQL BOT] First row: {
+  action: 'completed a task in',
+  user_name: 'Rakesh',
+  entity_type: 'task',
+  subject: 'Test Task',
+  created_at: 2026-10-09T10:21:40.045Z { nanosecondsDelta: 0.0001214 }
+}
+[legacy] safety=true exec=true rows=105
+  sql: SELECT a.action, u.name AS user_name, a.entity_type, a.subject, a.created_at FROM dbo.activities a JOIN dbo.users u ON a.user_id = u.id ORDER BY a.created_at DESC
+  columns: action, user_name, entity_type, subject, created_at
+  answer: Here are the results.
+[SQL BOT] pipeline: llm_first
+[SQL BOT][llm_first] pipeline=llm_first question="recent activities"
+[SQL BOT][llm_first] llm_ms=15681
+[DB] SQL Server execution: 23 ms
+[SQL BOT][llm_first] outcome=executed columns=["id","user_name","action","entity_type","entity_id","subject","created_at"] rows=10
+[SQL BOT][llm_first] sql=SELECT TOP 10 a.id AS id, u.name AS user_name, a.action AS action, a.entity_type AS entity_type, a.entity_id AS entity_id, a.subject AS subject, a.created_at AS created_at FROM dbo.activities a JOIN dbo.users u ON a.user_id = u.id ORDER BY a.created_at DESC
+[llm_first] safety=true exec=true rows=10
+  sql: SELECT TOP 10 a.id AS id, u.name AS user_name, a.action AS action, a.entity_type AS entity_type, a.entity_id AS entity_id, a.subject AS subject, a.created_at AS created_at FROM dbo.activities a JOIN dΓÇª
+  columns: id, user_name, action, entity_type, entity_id, subject, created_at
+  answer: Here are the results.
+
+=== how many active projects ===
+[SQL BOT] pipeline: legacy
+[AI] SQL generation: 3784 ms
+[DB] SQL Server execution: 11 ms
+[SQL BOT] Plan: {
+  intent: 'count',
+  entity: 'projects',
+  filters: [ 'status = ACTIVE' ],
+  dataContract: { fields: [ [Object] ] },
+  requestedFields: [ 'count' ],
+  presentation: 'paragraph',
+  presentationContract: { mode: 'summary', reason: 'scalar count', explicit: false },
+  useTable: false
+}
+[SQL BOT] Generated SQL: SELECT COUNT(*) AS count FROM dbo.projects WHERE status = 'ACTIVE'
+[SQL BOT] Result columns: [ 'count' ]
+[SQL BOT] First row: { count: 11 }
+[legacy] safety=true exec=true rows=1
+  sql: SELECT COUNT(*) AS count FROM dbo.projects WHERE status = 'ACTIVE'
+  columns: count
+  answer: There are 11 projects.
+[SQL BOT] pipeline: llm_first
+[SQL BOT][llm_first] pipeline=llm_first question="how many active projects"
+[SQL BOT][llm_first] llm_ms=11433
+[DB] SQL Server execution: 5 ms
+[SQL BOT][llm_first] outcome=executed columns=["count"] rows=1
+[SQL BOT][llm_first] sql=SELECT COUNT(*) AS count FROM dbo.projects WHERE status = 'ACTIVE'
+[llm_first] safety=true exec=true rows=1
+  sql: SELECT COUNT(*) AS count FROM dbo.projects WHERE status = 'ACTIVE'
+  columns: count
+  answer: There are 11 projects.
+
+=== count completed tasks ===
+[SQL BOT] pipeline: legacy
+[AI] SQL generation: 4047 ms
+[DB] SQL Server execution: 12 ms
+[SQL BOT] Plan: {
+  intent: 'count',
+  entity: 'tasks',
+  filters: [ 'status = COMPLETED' ],
+  dataContract: { fields: [ [Object] ] },
+  requestedFields: [ 'count' ],
+  presentation: 'paragraph',
+  presentationContract: { mode: 'summary', reason: 'scalar count', explicit: false },
+  useTable: false
+}
+[SQL BOT] Generated SQL: SELECT COUNT(*) AS count FROM dbo.tasks WHERE status = 'COMPLETED'
+[SQL BOT] Result columns: [ 'count' ]
+[SQL BOT] First row: { count: 19 }
+[legacy] safety=true exec=true rows=1
+  sql: SELECT COUNT(*) AS count FROM dbo.tasks WHERE status = 'COMPLETED'
+  columns: count
+  answer: There are 19 tasks.
+[SQL BOT] pipeline: llm_first
+[SQL BOT][llm_first] pipeline=llm_first question="count completed tasks"
+[SQL BOT][llm_first] llm_ms=12242
+[DB] SQL Server execution: 14 ms
+[SQL BOT][llm_first] outcome=executed columns=["count"] rows=1
+[SQL BOT][llm_first] sql=SELECT COUNT(*) AS count FROM dbo.tasks WHERE status = 'COMPLETED'
+[llm_first] safety=true exec=true rows=1
+  sql: SELECT COUNT(*) AS count FROM dbo.tasks WHERE status = 'COMPLETED'
+  columns: count
+  answer: There are 19 tasks.
+
+=== show documents ===
+[SQL BOT] pipeline: legacy
+[AI] SQL generation: 2024 ms
+[DB] SQL Server execution: 8 ms
+[SQL BOT] Plan: {
+  intent: 'list',
+  entity: 'documents',
+  filters: [],
+  dataContract: { fields: [ [Object] ] },
+  requestedFields: [ 'name' ],
+  presentation: 'list',
+  presentationContract: { mode: 'list', reason: 'entity result', explicit: false },
+  useTable: false
+}
+[SQL BOT] Generated SQL: SELECT name AS Document FROM dbo.documents
+[SQL BOT] Result columns: [ 'Document' ]
+[SQL BOT] First row: { Document: 'Customer Intelligence  Platform - Project Brief' }
+[legacy] safety=true exec=true rows=2
+  sql: SELECT name AS Document FROM dbo.documents
+  columns: Document
+  answer: The requested information (name) is unavailable, so I will not guess at it.
+[SQL BOT] pipeline: llm_first
+[SQL BOT][llm_first] pipeline=llm_first question="show documents"
+[SQL BOT][llm_first] llm_ms=13256
+[DB] SQL Server execution: 16 ms
+[SQL BOT][llm_first] outcome=executed columns=["name","file_name","file_type","file_size","uploaded_by","project_id","created_at"] rows=2
+[SQL BOT][llm_first] sql=SELECT d.name AS name, d.file_name AS file_name, d.file_type AS file_type, d.file_size AS file_size, d.uploaded_by AS uploaded_by, d.project_id AS project_id, d.created_at AS created_at FROM dbo.documents d
+[llm_first] safety=true exec=true rows=2
+  sql: SELECT d.name AS name, d.file_name AS file_name, d.file_type AS file_type, d.file_size AS file_size, d.uploaded_by AS uploaded_by, d.project_id AS project_id, d.created_at AS created_at FROM dbo.documΓÇª
+  columns: name, file_name, file_type, file_size, uploaded_by, project_id, created_at
+  answer: Here are the results.
+
+=== list documents for Customer Intelligence Platform ===
+[SQL BOT] pipeline: legacy
+[DB] SQL Server execution: 13 ms
+[AI] SQL generation: 5464 ms
+[DB] SQL Server execution: 13 ms
+[SQL BOT] Plan: {
+  intent: 'relationship_lookup',
+  entity: 'documents',
+  projectReference: 'Customer Intelligence Platform',
+  nameFilter: undefined,
+  filters: [ 'project_id = seed_proj_01' ],
+  dataContract: { fields: [ [Object] ] },
+  requestedFields: [ 'name' ],
+  presentation: 'list',
+  presentationContract: { mode: 'list', reason: 'explicit list request', explicit: true },
+  useTable: false,
+  resolvedProjectId: 'seed_proj_01',
+  resolvedProjectName: 'Customer Intelligence Platform'
+}
+[SQL BOT] Generated SQL: SELECT d.name FROM dbo.documents d JOIN dbo.projects p ON d.project_id = p.id WHERE p.name = 'Customer Intelligence Platform'
+[SQL BOT] Result columns: [ 'name' ]
+[SQL BOT] First row: { name: 'Customer Intelligence  Platform - Project Brief' }
+[legacy] safety=true exec=true rows=1
+  sql: SELECT d.name FROM dbo.documents d JOIN dbo.projects p ON d.project_id = p.id WHERE p.name = 'Customer Intelligence Platform'
+  columns: name
+  answer: Name: Customer Intelligence Platform - Project Brief.
+[SQL BOT] pipeline: llm_first
+[SQL BOT][llm_first] pipeline=llm_first question="list documents for Customer Intelligence Platform"
+[SQL BOT][llm_first] llm_ms=6247
+[DB] SQL Server execution: 13 ms
+[DB] SQL Server execution: 16 ms
+[SQL BOT][llm_first] outcome=executed columns=["name","file_name","file_type","file_size","uploaded_by","created_at"] rows=1
+[SQL BOT][llm_first] sql=SELECT d.name AS name, d.file_name AS file_name, d.file_type AS file_type, d.file_size AS file_size, d.uploaded_by AS uploaded_by, d.created_at AS created_at FROM dbo.documents d WHERE d.project_id = N'seed_proj_01'
+[llm_first] safety=true exec=true rows=1
+  sql: SELECT d.name AS name, d.file_name AS file_name, d.file_type AS file_type, d.file_size AS file_size, d.uploaded_by AS uploaded_by, d.created_at AS created_at FROM dbo.documents d WHERE d.project_id = ΓÇª
+  columns: name, file_name, file_type, file_size, uploaded_by, created_at
+  answer: Name: Customer Intelligence Platform - Project Brief; File Name: Northstar_Project_Brief_Test.pdf; File Type: application/pdf; File Size: 28ΓÇª
+
+=== what tables can you access ===
+[SQL BOT] pipeline: legacy
+[AI] SQL generation: 6082 ms
+[DB] SQL Server execution: 14 ms
+[SQL BOT] Plan: {
+  intent: 'lookup',
+  entity: 'workspace records',
+  filters: [],
+  dataContract: { fields: [] },
+  requestedFields: [],
+  presentation: 'list',
+  presentationContract: { mode: 'list', reason: 'entity result', explicit: false },
+  useTable: false
+}
+[SQL BOT] Generated SQL: SELECT 'projects' AS table_name UNION ALL
+SELECT 'project_members' UNION ALL
+SELECT 'tasks' UNION ALL
+SELECT 'users' UNION ALL
+SELECT 'documents' UNION ALL
+SELECT 'calendar_events' UNION ALL
+SELECT 'activities' UNION ALL
+SELECT 'notifications'
+[SQL BOT] Result columns: [ 'table_name' ]
+[SQL BOT] First row: { table_name: 'projects' }
+[legacy] safety=true exec=true rows=8
+  sql: SELECT 'projects' AS table_name UNION ALL SELECT 'project_members' UNION ALL SELECT 'tasks' UNION ALL SELECT 'users' UNION ALL SELECT 'documents' UNION ALL SELECT 'calendar_events' UNION ALL SELECT 'aΓÇª
+  columns: table_name
+  answer: - projects - project_members - tasks - users - documents - calendar_events - activities - notifications
+[SQL BOT] pipeline: llm_first
+[SQL BOT][llm_first] pipeline=llm_first question="what tables can you access"
+[SQL BOT][llm_first] llm_ms=9581
+[SQL BOT][llm_first] rejection reason="unsupported: Cannot retrieve schema or table metadata; only data queries are supported."
+[llm_first] safety=null exec=true rows=0
+  sql: (none)
+  columns: (none)
+  answer: Cannot retrieve schema or table metadata; only data queries are supported.
+
+=== what is the schema of users ===
+[SQL BOT] pipeline: legacy
+[AI] SQL generation: 2200 ms
+[DB] SQL Server execution: 6 ms
+[SQL BOT] Plan: {
+  intent: 'list',
+  entity: 'team members',
+  filters: [],
+  dataContract: { fields: [ [Object] ] },
+  requestedFields: [ 'name' ],
+  presentation: 'list',
+  presentationContract: { mode: 'list', reason: 'entity result', explicit: false },
+  useTable: false
+}
+[SQL BOT] Generated SQL: SELECT id, name, email, role, department, status, created_at, updated_at FROM dbo.users WHERE 1=0
+[SQL BOT] Result columns: []
+[SQL BOT] First row: null
+[legacy] safety=true exec=true rows=0
+  sql: SELECT id, name, email, role, department, status, created_at, updated_at FROM dbo.users WHERE 1=0
+  columns: (none)
+  answer: No team members matched your request.
+[SQL BOT] pipeline: llm_first
+[SQL BOT][llm_first] pipeline=llm_first question="what is the schema of users"
+[SQL BOT][llm_first] llm_ms=13505
+[SQL BOT][llm_first] rejection reason="unsupported: Schema metadata cannot be retrieved from the application tables."
+[llm_first] safety=null exec=true rows=0
+  sql: (none)
+  columns: (none)
+  answer: Schema metadata cannot be retrieved from the application tables.
+
+=== show details from password_reset table ===
+[SQL BOT] pipeline: legacy
+[AI] SQL generation: 12830 ms
+[DB] SQL Server execution: 11 ms
+[SQL BOT] Plan: {
+  intent: 'lookup',
+  entity: 'workspace records',
+  filters: [],
+  dataContract: { fields: [] },
+  requestedFields: [],
+  presentation: 'table',
+  presentationContract: { mode: 'table', reason: 'explicit table request', explicit: true },
+  useTable: true
+}
+[SQL BOT] Generated SQL: SELECT id FROM dbo.users WHERE 1=0
+[SQL BOT] Result columns: []
+[SQL BOT] First row: null
+[legacy] safety=true exec=true rows=0
+  sql: SELECT id FROM dbo.users WHERE 1=0
+  columns: (none)
+  answer: No workspace records matched your request.
+[SQL BOT] pipeline: llm_first
+[SQL BOT][llm_first] pipeline=llm_first question="show details from password_reset table"
+  [retry] Groq rate limit; waiting 20s before one retryΓÇª
+[SQL BOT] pipeline: llm_first
+[SQL BOT][llm_first] pipeline=llm_first question="show details from password_reset table"
+  [retry] Groq rate limit; waiting 20s before one retryΓÇª
+[llm_first] safety=true exec=false rows=0
+  sql: (none)
+  reason: Groq rate limit reached. Wait before retrying or check the account limits.
+  columns: (none)
+  answer: 
+
+Full report written to E:\Rakesh\Rak\projects\LNT Projects\Task-1\.llm-first-comparison.json
+
+Summary:
+- [legacy] "show all tasks": safety=true exec=true rows=82 cols=title
+- [llm_first] "show all tasks": safety=true exec=true rows=82 cols=id|title|description|status|priority|due_date|assigned_to|project_id|created_at|updated_at
+- [legacy] "show all users": safety=true exec=true rows=17 cols=name
+- [llm_first] "show all users": safety=true exec=true rows=17 cols=id|name|email|role|department|status|created_at
+- [legacy] "list all users": safety=true exec=true rows=17 cols=name
+- [llm_first] "list all users": safety=true exec=true rows=17 cols=id|name|email|role|department|status|created_at|updated_at
+- [legacy] "list all the details of the users": safety=true exec=true rows=17 cols=id|name|email|role|department|status|created_at|updated_at
+- [llm_first] "list all the details of the users": safety=true exec=true rows=17 cols=id|name|email|role|department|status|created_at|updated_at
+- [legacy] "list the tasks assigned to Jordan Lee": safety=true exec=true rows=14 cols=title|status
+- [llm_first] "list the tasks assigned to Jordan Lee": safety=true exec=true rows=14 cols=title|description|status|priority|due_date|project_name
+- [legacy] "tasks assigned to Jordan": safety=true exec=true rows=14 cols=Task|Status
+- [llm_first] "tasks assigned to Jordan": safety=true exec=true rows=14 cols=title|status|due_date|project_name
+- [legacy] "select the top 5 priority tasks": safety=true exec=true rows=5 cols=title|priority
+- [llm_first] "select the top 5 priority tasks": safety=true exec=true rows=5 cols=id|title|priority|status|due_date
+- [legacy] "highest priority tasks": safety=true exec=true rows=35 cols=title|priority
+- [llm_first] "highest priority tasks": safety=true exec=true rows=35 cols=id|title|priority|due_date|status
+- [legacy] "team members in Brand Evolution": safety=true exec=true rows=4 cols=Member
+- [llm_first] "team members in Brand Evolution": safety=true exec=true rows=0 cols=-
+- [legacy] "team members for Customer Intelligence": safety=true exec=true rows=3 cols=name
+- [llm_first] "team members for Customer Intelligence": safety=true exec=true rows=3 cols=user_name|email|role
+- [legacy] "latest project updates": safety=true exec=true rows=15 cols=action|user_name|entity_type|subject|created_at|project_name
+- [llm_first] "latest project updates": safety=true exec=true rows=10 cols=project_name|action|subject|created_at
+- [legacy] "recent activities": safety=true exec=true rows=105 cols=action|user_name|entity_type|subject|created_at
+- [llm_first] "recent activities": safety=true exec=true rows=10 cols=id|user_name|action|entity_type|entity_id|subject|created_at
+- [legacy] "how many active projects": safety=true exec=true rows=1 cols=count
+- [llm_first] "how many active projects": safety=true exec=true rows=1 cols=count
+- [legacy] "count completed tasks": safety=true exec=true rows=1 cols=count
+- [llm_first] "count completed tasks": safety=true exec=true rows=1 cols=count
+- [legacy] "show documents": safety=true exec=true rows=2 cols=Document
+- [llm_first] "show documents": safety=true exec=true rows=2 cols=name|file_name|file_type|file_size|uploaded_by|project_id|created_at
+- [legacy] "list documents for Customer Intelligence Platform": safety=true exec=true rows=1 cols=name
+- [llm_first] "list documents for Customer Intelligence Platform": safety=true exec=true rows=1 cols=name|file_name|file_type|file_size|uploaded_by|created_at
+- [legacy] "what tables can you access": safety=true exec=true rows=8 cols=table_name
+- [llm_first] "what tables can you access": safety=null exec=true rows=0 cols=-
+- [legacy] "what is the schema of users": safety=true exec=true rows=0 cols=-
+- [llm_first] "what is the schema of users": safety=null exec=true rows=0 cols=-
+- [legacy] "show details from password_reset table": safety=true exec=true rows=0 cols=-
+- [llm_first] "show details from password_reset table": safety=true exec=false rows=0 cols=-

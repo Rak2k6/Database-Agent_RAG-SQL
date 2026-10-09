@@ -1,0 +1,30 @@
+{
+  "generatedAt": "2026-10-09T07:03:48.457Z",
+  "runs": [
+    {
+      "question": "show details from password_reset table",
+      "pipeline": "legacy",
+      "routedInProduction": false,
+      "sql": "SELECT TOP 0 id FROM dbo.projects",
+      "passedSafetyValidation": true,
+      "executionSuccess": true,
+      "resultColumns": [],
+      "rowCount": 0,
+      "answer": "No workspace records matched your request.",
+      "durationMs": 53430
+    },
+    {
+      "question": "show details from password_reset table",
+      "pipeline": "llm_first",
+      "routedInProduction": false,
+      "sql": null,
+      "passedSafetyValidation": true,
+      "executionSuccess": false,
+      "resultColumns": [],
+      "rowCount": 0,
+      "answer": "",
+      "durationMs": 40649,
+      "rejectionReason": "Groq rate limit reached. Wait before retrying or check the account limits."
+    }
+  ]
+}

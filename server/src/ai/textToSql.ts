@@ -1,6 +1,10 @@
 import { chatWithGroq } from './groq.js';
+import type { ResponsePlan } from './responsePlanner.js';
 
-const DATABASE_SCHEMA = `
+// Verified schema context shared by the legacy prompt and the experimental
+// LLM-first pipeline. Only the sqlGuard-approved application tables exist here;
+// there is no workspace metadata table.
+export const DATABASE_SCHEMA = `
 SQL Server dbo schema. Only query these application tables:
 
 dbo.projects:
@@ -91,7 +95,7 @@ dbo.notifications:
 - created_at: DATETIME2
 `;
 
-export async function generateSql(question: string): Promise<string> {
+export async function generateSql(question: string, plan?: ResponsePlan): Promise<string> {
   const prompt = `
 You are a SQL query generator for the Northstar AI Workplace application.
 
@@ -118,9 +122,19 @@ Rules:
 - Do not invent table names, columns, statuses, or values.
 - Do not use stored procedures, functions, views, system tables, INFORMATION_SCHEMA, or undocumented objects.
 - Do not use subqueries as table sources in FROM or JOIN.
+- Person names live in users.name; assigned_to, created_by, and activities.user_id store user ids.
+- Counts per project: projects LEFT JOIN tasks, GROUP BY project name, SUM(CASE WHEN ...) with schema statuses.
+- Completed tasks = status 'COMPLETED'.
+- Pending/open tasks = status IN ('TODO','IN_PROGRESS').
+- Task lists: select exactly one project-name column (AS project_name), never project_id too.
+- For projects with no tasks: LEFT JOIN tasks WHERE tasks.id IS NULL.
 - Only query the explicitly listed dbo application tables.
+- For users with no tasks: users LEFT JOIN tasks WHERE tasks.id IS NULL.
 
 ${DATABASE_SCHEMA}
+
+Response plan guidance: ${plan ? JSON.stringify(plan) : 'none'}
+Use the plan to select relevant fields and requested limits. The plan dataContract.fields define exact SELECT aliases; every contract field must appear in output. Never fabricate fields.
 
 User question:
 ${question}

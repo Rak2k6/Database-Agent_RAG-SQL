@@ -59,19 +59,26 @@ function describeGroqError(error: unknown): string {
   return `Groq request failed: ${message}`;
 }
 
-async function requestCompletion(prompt: string): Promise<string | null> {
+export interface GroqChatOptions {
+  system?: string;
+}
+
+async function requestCompletion(prompt: string, options?: GroqChatOptions): Promise<string | null> {
   const completion = await getGroqClient().chat.completions.create({
     model: process.env.GROQ_MODEL || DEFAULT_GROQ_MODEL,
-    messages: [{ role: 'user', content: prompt }],
+    messages: [
+      ...(options?.system ? [{ role: 'system' as const, content: options.system }] : []),
+      { role: 'user', content: prompt },
+    ],
   });
 
   return completion.choices[0]?.message.content ?? null;
 }
 
-export async function chatWithGroq(prompt: string): Promise<string> {
+export async function chatWithGroq(prompt: string, options?: GroqChatOptions): Promise<string> {
   let content: string | null;
   try {
-    content = await requestCompletion(prompt);
+    content = await requestCompletion(prompt, options);
   } catch (error) {
     throw new Error(describeGroqError(error));
   }

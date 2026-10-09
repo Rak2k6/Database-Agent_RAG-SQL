@@ -1,0 +1,141 @@
+.documents-page {
+  padding-bottom: 24px;
+}
+
+.document-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 16px;
+}
+
+.document-error {
+  color: #a34432;
+  font-size: 11px;
+}
+
+.project-load-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.document-modal {
+  width: min(100%, 520px);
+}
+
+.document-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.document-drop-zone {
+  display: grid;
+  min-height: 178px;
+  align-content: center;
+  justify-items: center;
+  gap: 9px;
+  padding: 22px;
+  border: 1px dashed #b8cbbd;
+  border-radius: 5px;
+  background: #f8fbf8;
+  color: #78867d;
+  text-align: center;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.document-drop-zone.dragging {
+  border-color: #4f8965;
+  background: #edf6ef;
+}
+
+.document-drop-zone strong {
+  color: #405247;
+  font-size: 12px;
+}
+
+.document-drop-zone > span:not(.upload-icon) {
+  font-size: 10px;
+}
+
+.upload-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 50%;
+  background: #eaf3ed;
+  color: #39734c;
+  font-size: 19px;
+}
+
+.selected-file {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+  padding: 11px;
+  border: 1px solid #e2e9e5;
+  border-radius: 5px;
+  background: #f8fbf8;
+}
+
+.selected-file-icon {
+  color: #39734c;
+  font-size: 19px;
+}
+
+.selected-file-copy {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 4px;
+}
+
+.selected-file-copy strong {
+  overflow-wrap: anywhere;
+  color: #405247;
+  font-size: 10px;
+}
+
+.selected-file-copy small {
+  overflow-wrap: anywhere;
+  color: #87948b;
+  font-size: 9px;
+}
+
+.selected-file .quiet-action {
+  min-height: 30px;
+  padding: 0 8px;
+  font-size: 9px;
+}
+
+.remove-file:hover:not(:disabled) {
+  border-color: #edc9c0;
+  background: #fcf1ee;
+  color: #a34432;
+}
+
+.document-modal .modal-actions {
+  align-items: center;
+}
+
+@media (max-width: 480px) {
+  .selected-file {
+    flex-wrap: wrap;
+  }
+
+  .selected-file-copy {
+    flex-basis: calc(100% - 40px);
+  }
+
+  .selected-file .quiet-action:first-of-type {
+    margin-left: auto;
+  }
+}

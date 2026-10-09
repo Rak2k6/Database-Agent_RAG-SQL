@@ -9,10 +9,16 @@ export type AiChatSource = string | {
   name?: string;
 };
 
+export interface AiChatTable {
+  columns: string[];
+  rows: unknown[][];
+}
+
 export interface AiChatResponse {
   answer: string;
   source?: AiChatSource | AiChatSource[];
   sources?: AiChatSource[];
+  table?: AiChatTable;
 }
 
 @Injectable({ providedIn: 'root' })

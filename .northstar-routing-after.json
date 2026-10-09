@@ -1,0 +1,310 @@
+[
+  {
+    "question": "show all tasks",
+    "routed": true,
+    "entity": "tasks",
+    "intent": "list",
+    "personReference": null,
+    "projectReference": null,
+    "filters": [],
+    "sort": null,
+    "limit": null,
+    "fields": [
+      "title"
+    ]
+  },
+  {
+    "question": "show all users",
+    "routed": true,
+    "entity": "team members",
+    "intent": "list",
+    "personReference": null,
+    "projectReference": null,
+    "filters": [],
+    "sort": null,
+    "limit": null,
+    "fields": [
+      "name"
+    ]
+  },
+  {
+    "question": "list all users",
+    "routed": true,
+    "entity": "team members",
+    "intent": "list",
+    "personReference": null,
+    "projectReference": null,
+    "filters": [],
+    "sort": null,
+    "limit": null,
+    "fields": [
+      "name"
+    ]
+  },
+  {
+    "question": "list all the details of the users",
+    "routed": true,
+    "entity": "team members",
+    "intent": "list",
+    "personReference": null,
+    "projectReference": null,
+    "filters": [],
+    "sort": null,
+    "limit": null,
+    "fields": [
+      "name",
+      "role",
+      "department",
+      "status"
+    ]
+  },
+  {
+    "question": "list the tasks assigned to Jordan Lee",
+    "routed": true,
+    "entity": "tasks",
+    "intent": "person_workload",
+    "personReference": "Jordan Lee",
+    "projectReference": null,
+    "filters": [
+      "assigned_to = Jordan Lee"
+    ],
+    "sort": null,
+    "limit": null,
+    "fields": [
+      "title",
+      "status"
+    ]
+  },
+  {
+    "question": "tasks assigned to Jordan",
+    "routed": true,
+    "entity": "tasks",
+    "intent": "person_workload",
+    "personReference": "Jordan",
+    "projectReference": null,
+    "filters": [
+      "assigned_to = Jordan"
+    ],
+    "sort": null,
+    "limit": null,
+    "fields": [
+      "title",
+      "status"
+    ]
+  },
+  {
+    "question": "select the top 5 priority tasks",
+    "routed": true,
+    "entity": "tasks",
+    "intent": "ranking",
+    "personReference": null,
+    "projectReference": null,
+    "filters": [],
+    "sort": {
+      "field": "priority",
+      "direction": "desc"
+    },
+    "limit": 5,
+    "fields": [
+      "title",
+      "priority"
+    ]
+  },
+  {
+    "question": "highest priority tasks",
+    "routed": true,
+    "entity": "tasks",
+    "intent": "ranking",
+    "personReference": null,
+    "projectReference": null,
+    "filters": [],
+    "sort": {
+      "field": "priority",
+      "direction": "desc"
+    },
+    "limit": null,
+    "fields": [
+      "title",
+      "priority"
+    ]
+  },
+  {
+    "question": "team members in Brand Evolution",
+    "routed": true,
+    "entity": "project members",
+    "intent": "relationship_lookup",
+    "personReference": null,
+    "projectReference": "Brand Evolution",
+    "filters": [
+      "project reference = Brand Evolution"
+    ],
+    "sort": null,
+    "limit": null,
+    "fields": [
+      "name"
+    ]
+  },
+  {
+    "question": "team members for Customer Intelligence",
+    "routed": true,
+    "entity": "project members",
+    "intent": "relationship_lookup",
+    "personReference": null,
+    "projectReference": "Customer Intelligence",
+    "filters": [
+      "project reference = Customer Intelligence"
+    ],
+    "sort": null,
+    "limit": null,
+    "fields": [
+      "name"
+    ]
+  },
+  {
+    "question": "latest project updates",
+    "routed": true,
+    "entity": "activities",
+    "intent": "recent_activity",
+    "personReference": null,
+    "projectReference": null,
+    "filters": [
+      "ordered by created_at descending"
+    ],
+    "sort": {
+      "field": "created_at",
+      "direction": "desc"
+    },
+    "limit": null,
+    "fields": [
+      "action",
+      "user_name",
+      "entity_type",
+      "subject",
+      "created_at",
+      "project_name"
+    ]
+  },
+  {
+    "question": "recent activities",
+    "routed": true,
+    "entity": "activities",
+    "intent": "recent_activity",
+    "personReference": null,
+    "projectReference": null,
+    "filters": [
+      "ordered by created_at descending"
+    ],
+    "sort": {
+      "field": "created_at",
+      "direction": "desc"
+    },
+    "limit": null,
+    "fields": [
+      "action",
+      "user_name",
+      "entity_type",
+      "subject",
+      "created_at"
+    ]
+  },
+  {
+    "question": "how many active projects",
+    "routed": true,
+    "entity": "projects",
+    "intent": "count",
+    "personReference": null,
+    "projectReference": null,
+    "filters": [
+      "status = ACTIVE"
+    ],
+    "sort": null,
+    "limit": null,
+    "fields": [
+      "count"
+    ]
+  },
+  {
+    "question": "count completed tasks",
+    "routed": true,
+    "entity": "tasks",
+    "intent": "count",
+    "personReference": null,
+    "projectReference": null,
+    "filters": [
+      "status = COMPLETED"
+    ],
+    "sort": null,
+    "limit": null,
+    "fields": [
+      "count"
+    ]
+  },
+  {
+    "question": "show documents",
+    "routed": true,
+    "entity": "documents",
+    "intent": "list",
+    "personReference": null,
+    "projectReference": null,
+    "filters": [],
+    "sort": null,
+    "limit": null,
+    "fields": [
+      "name"
+    ]
+  },
+  {
+    "question": "list documents for Customer Intelligence Platform",
+    "routed": true,
+    "entity": "documents",
+    "intent": "relationship_lookup",
+    "personReference": null,
+    "projectReference": "Customer Intelligence Platform",
+    "filters": [
+      "project reference = Customer Intelligence Platform"
+    ],
+    "sort": null,
+    "limit": null,
+    "fields": [
+      "name"
+    ]
+  },
+  {
+    "question": "what tables can you access",
+    "routed": false,
+    "entity": "workspace records",
+    "intent": "lookup",
+    "personReference": null,
+    "projectReference": null,
+    "filters": [],
+    "sort": null,
+    "limit": null,
+    "fields": []
+  },
+  {
+    "question": "what is the schema of users",
+    "routed": false,
+    "entity": "team members",
+    "intent": "list",
+    "personReference": null,
+    "projectReference": null,
+    "filters": [],
+    "sort": null,
+    "limit": null,
+    "fields": [
+      "name"
+    ]
+  },
+  {
+    "question": "show details from password_reset table",
+    "routed": false,
+    "entity": "workspace records",
+    "intent": "lookup",
+    "personReference": null,
+    "projectReference": null,
+    "filters": [],
+    "sort": null,
+    "limit": null,
+    "fields": []
+  }
+]

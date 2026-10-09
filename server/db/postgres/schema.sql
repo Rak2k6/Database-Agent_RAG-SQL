@@ -268,6 +268,31 @@ CREATE TABLE user_settings (
 );
 GO
 
+create table dbo.document_chunks(
+id UNIQUEIDENTIFIER NOT NULL
+CONSTRAINT DF_dchunk_id DEFAULT NEWID(),
+document_id nvarchar(255) not null,
+doc_ver nvarchar(64) not null,
+chunk_index int not null,
+vector_id uniqueidentifier not null,
+chunk_hash char(64) not null,
+status nvarchar(20) not null constraint df_dchunks_status default 'pending',
+error_message nvarchar(2000) null,
+created_at datetime2 not null constraint df_dchunks_created_at default sysdatetime(),
+updated_at datetime2 not null constraint df_dchunks_updated_at default sysdatetime(),
+constraint doc_chunk primary key(id),
+constraint fk_documents foreign key(document_id) references dbo.documents(id),
+constraint dchunks_vector_id unique(vector_id),
+constraint dchunks_document_version_index unique(document_id,doc_ver,chunk_index),
+constraint dchunks_chunk_index check (chunk_index >=0),
+constraint document_chunk_status check(status in('pending','processing','indexed','failed'))
+);
+
+go
+
+create index IX_document_chunks_document_status on dbo.document_chunks(document_id,status);
+go
+
 
 CREATE INDEX password_reset_user_idx
 ON password_reset_tokens(user_id);

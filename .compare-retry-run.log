@@ -1,0 +1,10 @@
+﻿node : Γùç injected env (0) from .env
+    + CategoryInfo          : NotSpecified: (Γùç injected env (0) from .env:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+Connected to SQL Server: LAPTOP-AKH44TSK / Northstar
+
+
+=== show details from password_reset table ===
+[SQL BOT] pipeline: legacy
+  [retry] Groq rate limit; waiting 45s before one retryΓÇª

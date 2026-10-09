@@ -1,0 +1,251 @@
+﻿
+> enterprise-login@0.0.0 api:test
+> node ./node_modules/tsx/dist/cli.mjs --test server/src/server.test.ts server/src/document-upload.test.ts
+
+Γ£ö stores PDF bytes and passes the original filename and generated path to document creation (21.4506ms)
+Γ£ö stores a valid DOCX package and identifies its content type (10.8944ms)
+Γ£ö stores Markdown bytes and identifies its content type (7.5415ms)
+Γ£ö rejects unsupported file types and path traversal filenames (4.1134ms)
+Γ£ö rejects files exceeding the server-side size limit (2.6496ms)
+Γ£ö uses collision-resistant generated filenames and does not overwrite prior files (16.9109ms)
+Γ£ö removes the stored file when document metadata creation fails (6.6532ms)
+Γ£ö reports the exact stored filename, path, content type, and size to the database callback (7.3592ms)
+Γ£ö creates a missing upload directory automatically (16.0962ms)
+Γ£û PostgreSQL seed preserves the demo dataset and remains idempotent (182.5908ms)
+Γ£û local account lifecycle hashes secrets and revokes sessions and reset links (2.0611ms)
+Γ£û workplace REST endpoints for dashboard, projects, tasks, calendar, documents and settings (0.1295ms)
+Γ£û read-only SQL guard permits approved SELECTs and rejects writes and private tables (0.0828ms)
+Γ£û AI Text-to-SQL executes PostgreSQL project, task, and recent activity queries (0.1464ms)
+Γ£û database result formatter handles empty results, project lists, and counts (0.0832ms)
+Γ£û database row formatter produces a compact readable table (0.0871ms)
+Γ£û AI chat routes database questions through one SQL inference and preserves general chat (0.0719ms)
+Γ£û E:\Rakesh\Rak\projects\LNT Projects\Task-1\server\src\server.test.ts (0.6273ms)
+Γä╣ tests 18
+Γä╣ suites 0
+Γä╣ pass 9
+Γä╣ fail 9
+Γä╣ cancelled 0
+Γä╣ skipped 0
+Γä╣ todo 0
+Γä╣ duration_ms 909.6489
+
+Γ£û failing tests:
+
+test at server\src\server.test.ts:106:1
+Γ£û PostgreSQL seed preserves the demo dataset and remains idempotent (182.5908ms)
+  error: syntax error at or near "GO"
+      at E:\Rakesh\Rak\projects\LNT Projects\Task-1\node_modules\pg\lib\client.js:694:17
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (E:\Rakesh\Rak\projects\LNT Projects\Task-1\server\src\server.test.ts:42:5)
+      at async TestHook.run (node:internal/test_runner/test:1102:7) {
+    length: 91,
+    severity: 'ERROR',
+    code: '42601',
+    detail: undefined,
+    hint: undefined,
+    position: '28',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'scan.l',
+    line: '1240',
+    routine: 'scanner_yyerror'
+  }
+
+test at server\src\server.test.ts:128:1
+Γ£û local account lifecycle hashes secrets and revokes sessions and reset links (2.0611ms)
+  error: syntax error at or near "GO"
+      at E:\Rakesh\Rak\projects\LNT Projects\Task-1\node_modules\pg\lib\client.js:694:17
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (E:\Rakesh\Rak\projects\LNT Projects\Task-1\server\src\server.test.ts:42:5)
+      at async TestHook.run (node:internal/test_runner/test:1102:7) {
+    length: 91,
+    severity: 'ERROR',
+    code: '42601',
+    detail: undefined,
+    hint: undefined,
+    position: '28',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'scan.l',
+    line: '1240',
+    routine: 'scanner_yyerror'
+  }
+
+test at server\src\server.test.ts:214:1
+Γ£û workplace REST endpoints for dashboard, projects, tasks, calendar, documents and settings (0.1295ms)
+  error: syntax error at or near "GO"
+      at E:\Rakesh\Rak\projects\LNT Projects\Task-1\node_modules\pg\lib\client.js:694:17
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (E:\Rakesh\Rak\projects\LNT Projects\Task-1\server\src\server.test.ts:42:5)
+      at async TestHook.run (node:internal/test_runner/test:1102:7) {
+    length: 91,
+    severity: 'ERROR',
+    code: '42601',
+    detail: undefined,
+    hint: undefined,
+    position: '28',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'scan.l',
+    line: '1240',
+    routine: 'scanner_yyerror'
+  }
+
+test at server\src\server.test.ts:400:1
+Γ£û read-only SQL guard permits approved SELECTs and rejects writes and private tables (0.0828ms)
+  error: syntax error at or near "GO"
+      at E:\Rakesh\Rak\projects\LNT Projects\Task-1\node_modules\pg\lib\client.js:694:17
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (E:\Rakesh\Rak\projects\LNT Projects\Task-1\server\src\server.test.ts:42:5)
+      at async TestHook.run (node:internal/test_runner/test:1102:7) {
+    length: 91,
+    severity: 'ERROR',
+    code: '42601',
+    detail: undefined,
+    hint: undefined,
+    position: '28',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'scan.l',
+    line: '1240',
+    routine: 'scanner_yyerror'
+  }
+
+test at server\src\server.test.ts:434:1
+Γ£û AI Text-to-SQL executes PostgreSQL project, task, and recent activity queries (0.1464ms)
+  error: syntax error at or near "GO"
+      at E:\Rakesh\Rak\projects\LNT Projects\Task-1\node_modules\pg\lib\client.js:694:17
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (E:\Rakesh\Rak\projects\LNT Projects\Task-1\server\src\server.test.ts:42:5)
+      at async TestHook.run (node:internal/test_runner/test:1102:7) {
+    length: 91,
+    severity: 'ERROR',
+    code: '42601',
+    detail: undefined,
+    hint: undefined,
+    position: '28',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'scan.l',
+    line: '1240',
+    routine: 'scanner_yyerror'
+  }
+
+test at server\src\server.test.ts:492:1
+Γ£û database result formatter handles empty results, project lists, and counts (0.0832ms)
+  error: syntax error at or near "GO"
+      at E:\Rakesh\Rak\projects\LNT Projects\Task-1\node_modules\pg\lib\client.js:694:17
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (E:\Rakesh\Rak\projects\LNT Projects\Task-1\server\src\server.test.ts:42:5)
+      at async TestHook.run (node:internal/test_runner/test:1102:7) {
+    length: 91,
+    severity: 'ERROR',
+    code: '42601',
+    detail: undefined,
+    hint: undefined,
+    position: '28',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'scan.l',
+    line: '1240',
+    routine: 'scanner_yyerror'
+  }
+
+test at server\src\server.test.ts:524:1
+Γ£û database row formatter produces a compact readable table (0.0871ms)
+  error: syntax error at or near "GO"
+      at E:\Rakesh\Rak\projects\LNT Projects\Task-1\node_modules\pg\lib\client.js:694:17
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (E:\Rakesh\Rak\projects\LNT Projects\Task-1\server\src\server.test.ts:42:5)
+      at async TestHook.run (node:internal/test_runner/test:1102:7) {
+    length: 91,
+    severity: 'ERROR',
+    code: '42601',
+    detail: undefined,
+    hint: undefined,
+    position: '28',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'scan.l',
+    line: '1240',
+    routine: 'scanner_yyerror'
+  }
+
+test at server\src\server.test.ts:536:1
+Γ£û AI chat routes database questions through one SQL inference and preserves general chat (0.0719ms)
+  error: syntax error at or near "GO"
+      at E:\Rakesh\Rak\projects\LNT Projects\Task-1\node_modules\pg\lib\client.js:694:17
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (E:\Rakesh\Rak\projects\LNT Projects\Task-1\server\src\server.test.ts:42:5)
+      at async TestHook.run (node:internal/test_runner/test:1102:7) {
+    length: 91,
+    severity: 'ERROR',
+    code: '42601',
+    detail: undefined,
+    hint: undefined,
+    position: '28',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'scan.l',
+    line: '1240',
+    routine: 'scanner_yyerror'
+  }
+
+test at server\src\server.test.ts:99:1
+Γ£û E:\Rakesh\Rak\projects\LNT Projects\Task-1\server\src\server.test.ts (0.6273ms)
+  Error: Client was closed and is not queryable
+      at E:\Rakesh\Rak\projects\LNT Projects\Task-1\node_modules\pg\lib\client.js:694:17
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (E:\Rakesh\Rak\projects\LNT Projects\Task-1\server\src\server.test.ts:102:19)
+      at async TestHook.run (node:internal/test_runner/test:1102:7)
+      at async Test.runHook (node:internal/test_runner/test:1013:9)
+      at async after (node:internal/test_runner/test:1053:9)
+      at async Test.run (node:internal/test_runner/test:1121:7)

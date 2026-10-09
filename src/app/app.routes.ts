@@ -1,6 +1,7 @@
 import { Routes } from '@angular/router';
 import { ForgotPasswordComponent, ResetPasswordComponent, SignupComponent } from './auth/auth-pages.component';
 import { DashboardComponent } from './dashboard/dashboard.component';
+import { AiChatComponent } from './ai-chat/ai-chat.component';
 import { LoginComponent } from './login/login.component';
 import { DashboardOverviewComponent } from './pages/dashboard-overview/dashboard-overview.component';
 import { CalendarComponent } from './pages/calendar/calendar.component';
@@ -33,6 +34,7 @@ export const routes: Routes = [
       { path: 'team', component: TeamComponent, data: { section: 'Team' }, title: 'Team | Northstar AI' },
       { path: 'calendar', component: CalendarComponent, data: { section: 'Calendar' }, title: 'Calendar | Northstar AI' },
       { path: 'documents', component: DocumentsComponent, data: { section: 'Documents' }, title: 'Documents | Northstar AI' },
+      { path: 'ai', component: AiChatComponent, data: { section: 'Northstar AI' }, title: 'Northstar AI | Northstar AI' },
       { path: 'reports', component: ReportsComponent, data: { section: 'Reports' }, title: 'Reports | Northstar AI' },
       { path: 'settings', component: SettingsComponent, data: { section: 'Settings' }, title: 'Settings | Northstar AI' },
     ],

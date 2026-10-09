@@ -1,37 +1,119 @@
-<div class="page-container">
+<div class="page-container documents-page">
   <header class="page-header">
-    <div><p class="eyebrow">WORKSPACE</p><h1>Documents</h1><p>Shared project files and reference material.</p></div>
-    <button class="primary-action" type="button" (click)="showForm.set(true)">Add document</button>
+    <div>
+      <p class="eyebrow">WORKSPACE</p>
+      <h1>Documents</h1>
+      <p>Organize and manage shared project files and reference material.</p>
+    </div>
+    <button class="primary-action" type="button" (click)="openForm()">＋ Add Document</button>
   </header>
+
+  @if (success()) {
+    <p class="form-success document-notice" role="status">{{ success() }}</p>
+  }
+  @if (error() && !showForm()) {
+    <div class="document-notice document-error" role="alert">
+      <span>{{ error() }}</span>
+      <button type="button" class="quiet-action" (click)="loadDocuments()">Retry</button>
+    </div>
+  }
 
   <section class="page-toolbar" aria-label="Search documents">
     <input type="search" placeholder="Search documents" aria-label="Search documents" [ngModel]="search()" (ngModelChange)="search.set($event); loadDocuments()" />
     <span>{{ documents().length }} documents</span>
   </section>
 
-  @if (loading()) { <p class="page-state" role="status">Loading documents...</p> }
-  @else if (documents().length === 0) { <p class="page-state">No documents found.</p> }
-  @else {
-    <div class="table-scroll"><table class="data-table"><thead><tr><th>Name</th><th>Folder</th><th>Project</th><th>Added by</th><th>Size</th><th>Added</th><th></th></tr></thead><tbody>
-      @for (document of documents(); track document.id) {
-        <tr><td><strong>{{ document.name }}</strong><small class="table-subtext">{{ document.fileName }} · {{ document.fileType }}</small></td><td>{{ document.folder }}</td><td>{{ document.project }}</td><td>{{ document.uploadedBy }}</td><td>{{ formatSize(document.fileSize) }}</td><td>{{ document.createdAt | date:'mediumDate' }}</td><td><button class="quiet-action" type="button" (click)="deleteDocument(document)" aria-label="Delete {{ document.name }}">Delete</button></td></tr>
-      }
-    </tbody></table></div>
+  @if (loading()) {
+    <p class="page-state" role="status">Loading documents...</p>
+  } @else if (error() && documents().length === 0) {
+    <p class="page-state">Documents could not be loaded.</p>
+  } @else if (documents().length === 0) {
+    <p class="page-state">No documents found.</p>
+  } @else {
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead><tr><th>Name</th><th>Folder</th><th>Project</th><th>Added by</th><th>Size</th><th>Added</th><th></th></tr></thead>
+        <tbody>
+          @for (document of documents(); track document.id) {
+            <tr>
+              <td><strong>{{ document.name }}</strong><small class="table-subtext">{{ document.fileName }} · {{ document.fileType }}</small></td>
+              <td>{{ document.folder }}</td>
+              <td>{{ document.project }}</td>
+              <td>{{ document.uploadedBy }}</td>
+              <td>{{ formatSize(document.fileSize) }}</td>
+              <td>{{ document.createdAt | date:'mediumDate' }}</td>
+              <td><button class="quiet-action" type="button" (click)="deleteDocument(document)" aria-label="Delete {{ document.name }}">Delete</button></td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
   }
 
   @if (showForm()) {
-    <div class="modal-backdrop" (click)="showForm.set(false)"><section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="document-form-title" (click)="$event.stopPropagation()">
-      <h2 id="document-form-title">Add document record</h2>
-      <p class="form-note">This records file details in the workspace; it does not upload file contents.</p>
-      @if (error()) { <p class="form-error" role="alert">{{ error() }}</p> }
-      <form (submit)="$event.preventDefault(); addDocument()">
-        <label>Display name<input [(ngModel)]="newDocument.name" name="name" required minlength="2" /></label>
-        <label>File name<input [(ngModel)]="newDocument.file_name" name="file_name" required /></label>
-        <label>File type<input [(ngModel)]="newDocument.file_type" name="file_type" required /></label>
-        <label>Size in bytes<input type="number" [(ngModel)]="newDocument.file_size" name="file_size" required min="1" /></label>
-        <label>Folder<input [(ngModel)]="newDocument.folder" name="folder" required /></label>
-        <div class="modal-actions"><button type="button" class="quiet-action" (click)="showForm.set(false)">Cancel</button><button type="submit" class="primary-action">Add record</button></div>
-      </form>
-    </section></div>
+    <div class="modal-backdrop" (click)="closeForm()">
+      <section class="modal-card document-modal" role="dialog" aria-modal="true" aria-labelledby="document-form-title" (click)="$event.stopPropagation()">
+        <h2 id="document-form-title">Add Document</h2>
+        <p class="form-note">Choose a PDF, DOCX, or Markdown (.md) file, then add its project and folder details.</p>
+
+        @if (error()) { <p class="form-error" role="alert">{{ error() }}</p> }
+        @if (projectError()) {
+          <div class="form-error project-load-error" role="alert">
+            <span>{{ projectError() }}</span>
+            <button class="quiet-action" type="button" (click)="loadProjects()">Retry projects</button>
+          </div>
+        }
+
+        <form (submit)="$event.preventDefault(); addDocument()">
+          <input #fileInput class="document-file-input" type="file" accept=".pdf,.docx,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/markdown" (change)="onFileInput($event)" />
+
+          @if (selectedFile(); as file) {
+            <div class="selected-file">
+              <span class="selected-file-icon" aria-hidden="true">▤</span>
+              <span class="selected-file-copy">
+                <strong>{{ file.name }}</strong>
+                <small>{{ formatSize(file.size) }} · {{ fileType(file) }}</small>
+              </span>
+              <button class="quiet-action" type="button" [disabled]="submitting()" (click)="fileInput.click()">Replace</button>
+              <button class="quiet-action remove-file" type="button" [disabled]="submitting()" (click)="removeFile()">Remove</button>
+            </div>
+          } @else {
+            <div
+              class="document-drop-zone"
+              [class.dragging]="dragging()"
+              (dragover)="onDragOver($event)"
+              (dragleave)="onDragLeave($event)"
+              (drop)="onFileDrop($event)">
+              <span class="upload-icon" aria-hidden="true">↑</span>
+              <strong>Drag and drop a file here</strong>
+              <span>PDF, DOCX, or Markdown (.md) · up to 20 MB</span>
+              <button class="quiet-action" type="button" [disabled]="submitting()" (click)="fileInput.click()">Browse Files</button>
+            </div>
+          }
+
+          <label>Document name *
+            <input [(ngModel)]="newDocument.name" name="name" required minlength="2" maxlength="200" placeholder="e.g. Project requirements" />
+          </label>
+          <label>Project *
+            <select [(ngModel)]="newDocument.project_id" name="project_id" required [disabled]="projectLoading() || projects().length === 0">
+              <option value="" disabled>{{ projectLoading() ? 'Loading projects...' : projects().length ? 'Select a project' : 'No projects available' }}</option>
+              @for (project of projects(); track project.id) {
+                <option [value]="project.id">{{ project.name }}</option>
+              }
+            </select>
+          </label>
+          <label>Folder / category *
+            <input [(ngModel)]="newDocument.folder" name="folder" required maxlength="100" placeholder="e.g. Design, Contracts, General" />
+          </label>
+
+          <div class="modal-actions">
+            <button type="button" class="quiet-action" [disabled]="submitting()" (click)="closeForm()">Cancel</button>
+            <button type="submit" class="primary-action" [disabled]="submitting() || projectLoading() || !projects().length || !selectedFile()">
+              {{ submitting() ? 'Adding document...' : 'Add Document' }}
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
   }
 </div>

@@ -2,13 +2,35 @@ import bcrypt from 'bcryptjs';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express, { NextFunction, Request, Response } from 'express';
+import multer, { MulterError } from 'multer';
 import rateLimit from 'express-rate-limit';
 import { OAuth2Client } from 'google-auth-library';
 import helmet from 'helmet';
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
+import {
+  DocumentIndexingError,
+  indexProcessedDocument,
+  withDocumentContentLock,
+} from './ai/document-indexing.js';
+import {
+  buildDocumentGroundedPrompt,
+  buildDocumentGroundedSystemPrompt,
+  DocumentRetrievalError,
+  isDocumentContentQuestion,
+  retrieveDocumentChunks,
+} from './ai/document-retrieval.js';
 import { answerDatabaseQuestion, isDatabaseQuestion } from './ai/databaseQuery.js';
 import { chatWithGroq } from './ai/groq.js';
+import {
+  NORTHSTAR_CAPABILITIES_ANSWER,
+  WORKSPACE_UNAVAILABLE_ANSWER,
+  answerIdentityQuestion,
+  buildNorthstarSystemPrompt,
+  isCapabilitiesQuestion,
+  isIdentityQuestion,
+  validateNorthstarResponse,
+} from './ai/northstar.js';
 
 // ── Domain DB modules ─────────────────────────────────────────────────────────
 import * as Auth from './db/auth.js';
@@ -16,10 +38,23 @@ import * as Projects from './db/projects.js';
 import * as Tasks from './db/tasks.js';
 import * as Calendar from './db/calendar.js';
 import * as Documents from './db/documents.js';
+import { documentChunkMappings } from './db/document-chunks.js';
 import * as Team from './db/team.js';
 import * as Notifications from './db/notifications.js';
 import * as Dashboard from './db/dashboard.js';
 import * as Settings from './db/settings.js';
+import {
+  DOCUMENT_UPLOAD_DIRECTORY,
+  DocumentStorageError,
+  DocumentUploadCleanupError,
+  DocumentUploadValidationError,
+  MAX_DOCUMENT_FILE_SIZE,
+  persistUploadedDocument,
+  validateUploadedDocument,
+} from './document-upload.js';
+import { processStoredDocument } from './document-processing.js';
+import { canUploadDocumentToProject } from './document-authorization.js';
+import { QdrantService, QdrantServiceError } from './ai/qdrant.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -32,6 +67,10 @@ const isLocalDevelopmentOrigin = (origin: string): boolean =>
   !isProduction && /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
 const resetEmailMode = process.env.RESET_EMAIL_MODE ?? 'mock';
 const allowedEmailDomain = (process.env.ALLOWED_EMAIL_DOMAIN ?? 'northstarai.com').toLowerCase();
+const documentUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_DOCUMENT_FILE_SIZE, files: 1, fields: 3, fieldNameSize: 100, fieldSize: 1000, parts: 4 },
+});
 
 // ── Zod schemas ───────────────────────────────────────────────────────────────
 
@@ -132,6 +171,14 @@ export function createApp(): express.Express {
 
   // ── AI API ───────────────────────────────────────────────────────────────
 
+function looksLikeWorkspaceRecords(message: string, answer: string): boolean {
+  if (!/\b(?:project|task|assign|working on|workload|activit|due|overdue)\b/i.test(message)) return false;
+  const lines = answer.split('\n').filter((l) => l.trim());
+  const bullets = lines.filter((l) => /^\s*[-*•\d.]/.test(l)).length;
+  const pseudoRows = lines.filter((l) => (l.match(/\|/g) ?? []).length >= 2).length;
+  return (bullets >= 2 && /\b(project|task|due|status|assign)\b/i.test(answer)) || pseudoRows >= 2;
+}
+
   app.post('/api/ai/chat', requireUser, async (req, res, next) => {
     try {
       const message = typeof req.body?.message === 'string' ? req.body.message.trim() : '';
@@ -139,14 +186,83 @@ export function createApp(): express.Express {
         res.status(400).json({ error: { code: 'INVALID_MESSAGE', message: 'Message must be between 1 and 4000 characters.' } });
         return;
       }
-      if (isDatabaseQuestion(message)) {
+      const documentContentQuestion = isDocumentContentQuestion(message);
+      if (!documentContentQuestion && isDatabaseQuestion(message)) {
         const result = await answerDatabaseQuestion(message);
-        res.json({ answer: result.answer, source: 'database' });
+        res.json({ answer: result.answer, source: 'database', ...(result.table ? { table: result.table } : {}) });
         return;
       }
-      const answer = await chatWithGroq(message);
+      // Deterministic identity/capabilities answers — never hit the model,
+      // so the provider identity can never leak for these questions.
+      if (isIdentityQuestion(message)) {
+        res.json({ answer: answerIdentityQuestion(message), source: 'identity' });
+        return;
+      }
+      if (isCapabilitiesQuestion(message)) {
+        res.json({ answer: NORTHSTAR_CAPABILITIES_ANSWER, source: 'identity' });
+        return;
+      }
+      const requestedProjectId = req.body?.projectId;
+      if (
+        requestedProjectId !== undefined &&
+        (typeof requestedProjectId !== 'string' || !requestedProjectId.trim() || requestedProjectId.length > 255)
+      ) {
+        res.status(400).json({ error: { code: 'INVALID_PROJECT_ID', message: 'The project ID is invalid.' } });
+        return;
+      }
+      const shouldSearchDocuments = documentContentQuestion || requestedProjectId !== undefined;
+      const currentUser = res.locals.user as import('./db/types.js').UserRow;
+      const documentChunks = shouldSearchDocuments
+        ? await retrieveDocumentChunks(currentUser.id, message, requestedProjectId)
+        : [];
+      if (documentChunks.length > 0) {
+        const system = [
+          buildNorthstarSystemPrompt(),
+          buildDocumentGroundedSystemPrompt(),
+        ].join('\n');
+        const rawAnswer = await chatWithGroq(buildDocumentGroundedPrompt(message, documentChunks), { system });
+        const answer = validateNorthstarResponse(rawAnswer);
+        res.json({
+          answer,
+          source: 'documents',
+          citations: documentChunks.map((chunk) => ({
+            documentId: chunk.documentId,
+            documentName: chunk.documentName,
+            fileName: chunk.originalFilename,
+            chunkIndex: chunk.chunkIndex,
+            ...(chunk.pageNumber === undefined ? {} : { pageNumber: chunk.pageNumber }),
+            ...(chunk.section === undefined ? {} : { section: chunk.section }),
+          })),
+        });
+        return;
+      }
+      if (shouldSearchDocuments) {
+        res.json({
+          answer: 'I could not find relevant content in the documents you can access.',
+          source: 'documents',
+          citations: [],
+        });
+        return;
+      }
+      // Instruction-level guardrails: every conversational answer is
+      // generated under the Northstar system prompt, then validated.
+      const rawAnswer = await chatWithGroq(message, { system: buildNorthstarSystemPrompt() });
+      const answer = validateNorthstarResponse(rawAnswer);
+      // Last-resort hallucination guard: a conversational answer that
+      // looks like workspace records must never be served as fact.
+      if (answer === rawAnswer && looksLikeWorkspaceRecords(message, rawAnswer)) {
+        res.json({ answer: WORKSPACE_UNAVAILABLE_ANSWER });
+        return;
+      }
       res.json({ answer });
     } catch (error) {
+      if (error instanceof DocumentRetrievalError) {
+        console.error('[DOCUMENT_RETRIEVAL] chat request failed', { code: error.code });
+        res.status(error.status).json({
+          error: { code: error.code, message: error.message },
+        });
+        return;
+      }
       console.error('AI chat request failed:', error);
       res.status(500).json({ error: { code: 'AI_CHAT_FAILED', message: 'I could not complete that request. Please try again.' } });
     }
@@ -727,27 +843,317 @@ export function createApp(): express.Express {
   });
 
   const createDocumentSchema = z.object({
-    name:       z.string().trim().min(2).max(200),
-    file_name:  z.string().trim().min(1).max(255),
-    file_type:  z.string().trim().default('application/pdf'),
-    file_size:  z.number().int().positive().default(1024),
-    folder:     z.string().trim().default('General'),
-    project_id: z.string().optional().nullable(),
+    name: z.string().trim().min(2).max(200),
+    folder: z.string().trim().min(1).max(100),
+    project_id: z.string().trim().min(1).max(100),
   });
 
-  app.post('/api/documents', requireUser, async (req, res, next) => {
+  app.post('/api/documents', requireUser, (req, res, next) => {
+    documentUpload.single('file')(req, res, (error: unknown) => {
+      if (!error) {
+        next();
+        return;
+      }
+      if (error instanceof MulterError) {
+        const tooLarge = error.code === 'LIMIT_FILE_SIZE';
+        res.status(tooLarge ? 413 : 400).json({
+          error: {
+            code: tooLarge ? 'FILE_TOO_LARGE' : 'INVALID_UPLOAD',
+            message: tooLarge
+              ? `Choose a file no larger than ${MAX_DOCUMENT_FILE_SIZE / (1024 * 1024)} MB.`
+              : 'The multipart upload is invalid or contains too many fields.',
+          },
+        });
+        return;
+      }
+      next(error);
+    });
+  }, async (req, res, next) => {
     try {
+      if (!req.file) {
+        res.status(400).json({ error: { code: 'FILE_REQUIRED', message: 'Choose a document file to upload.' } });
+        return;
+      }
+
       const input = parse(createDocumentSchema, req.body, res);
       if (!input) return;
+
       const currentUser = res.locals.user as import('./db/types.js').UserRow;
-      const id = 'doc_' + randomUUID().slice(0, 8);
+      if (!await canUploadDocumentToProject(
+        input.project_id,
+        currentUser.id,
+        Projects.getProjectMembers,
+      )) {
+        res.status(403).json({
+          error: { code: 'PROJECT_ACCESS_DENIED', message: 'You do not have access to upload documents to this project.' },
+        });
+        return;
+      }
 
-      await Documents.createDocument(
-        id, input.name, input.file_name, input.file_type, input.file_size,
-        currentUser.id, input.project_id ?? null, input.folder,
+      validateUploadedDocument(req.file);
+      const documentVersion = createHash('sha256').update(req.file.buffer).digest('hex');
+      const result = await withDocumentContentLock(
+        input.project_id,
+        currentUser.id,
+        documentVersion,
+        async () => {
+          const existing = await Documents.findDocumentWithContentVersion(
+            input.project_id,
+            currentUser.id,
+            documentVersion,
+          );
+          if (existing?.file_name && existing.file_path) {
+            const processing = await processStoredDocument(
+              {
+                documentId: existing.id,
+                projectId: existing.project_id,
+                originalFilename: existing.file_name,
+                filePath: existing.file_path,
+              },
+              { uploadDirectory: DOCUMENT_UPLOAD_DIRECTORY },
+            );
+            if (processing.sourceHash === documentVersion) {
+              if (processing.processingStatus === 'failed') {
+                throw new DocumentUploadValidationError(
+                  processing.extractionError?.message ?? 'The document could not be processed.',
+                  processing.extractionError?.code ?? 'DOCUMENT_PROCESSING_FAILED',
+                  400,
+                );
+              }
+              try {
+                const indexing = await indexProcessedDocument({
+                  documentId: existing.id,
+                  projectId: existing.project_id,
+                  docVer: documentVersion,
+                  chunks: processing.chunks,
+                });
+                return {
+                  document: existing,
+                  indexing: { success: true as const, result: indexing },
+                  reusedDocument: true,
+                };
+              } catch (error) {
+                const code = error instanceof DocumentIndexingError ? error.code : 'DOCUMENT_INDEXING_FAILED';
+                console.error('[DOCUMENT_INDEXING] failed', { documentId: existing.id, code });
+                return {
+                  document: existing,
+                  indexing: {
+                    success: false as const,
+                    code,
+                    chunkCount: processing.chunks.length,
+                  },
+                  reusedDocument: true,
+                };
+              }
+            }
+          }
+
+          const id = 'doc_' + randomUUID();
+          const storedResult = await persistUploadedDocument(
+            req.file!,
+            DOCUMENT_UPLOAD_DIRECTORY,
+            async (file) => {
+              const processing = await processStoredDocument(
+                {
+                  documentId: id,
+                  projectId: input.project_id,
+                  originalFilename: file.fileName,
+                  filePath: file.filePath,
+                },
+                { uploadDirectory: DOCUMENT_UPLOAD_DIRECTORY },
+              );
+              if (processing.processingStatus === 'failed') {
+                throw new DocumentUploadValidationError(
+                  processing.extractionError?.message ?? 'The document could not be processed.',
+                  processing.extractionError?.code ?? 'DOCUMENT_PROCESSING_FAILED',
+                  400,
+                );
+              }
+              if (processing.sourceHash !== documentVersion) {
+                throw new DocumentUploadValidationError(
+                  'The stored document content did not match the uploaded file.',
+                  'DOCUMENT_CONTENT_MISMATCH',
+                  400,
+                );
+              }
+
+              const document = await Documents.createDocument(
+                id, input.name, file.fileName, file.filePath, file.fileType, file.fileSize,
+                currentUser.id, input.project_id, input.folder,
+              );
+              try {
+                const indexing = await indexProcessedDocument({
+                  documentId: id,
+                  projectId: input.project_id,
+                  docVer: documentVersion,
+                  chunks: processing.chunks,
+                });
+                return { document, indexing: { success: true as const, result: indexing } };
+              } catch (error) {
+                const code = error instanceof DocumentIndexingError ? error.code : 'DOCUMENT_INDEXING_FAILED';
+                console.error('[DOCUMENT_INDEXING] failed', { documentId: id, code });
+                return {
+                  document,
+                  indexing: {
+                    success: false as const,
+                    code,
+                    chunkCount: processing.chunks.length,
+                  },
+                };
+              }
+            },
+          );
+          return { ...storedResult, reusedDocument: false };
+        },
       );
+      if (!result.indexing.success) {
+        res.status(503).json({
+          error: {
+            code: result.indexing.code,
+            message: 'The document was stored, but indexing did not complete. It is retained for retry.',
+          },
+          documentId: result.document.id,
+          processingStatus: 'failed',
+          chunkCount: result.indexing.chunkCount,
+        });
+        return;
+      }
+      res.status(result.reusedDocument ? 200 : 201).json({
+        id: result.document.id,
+        message: result.reusedDocument ? 'Existing document reused.' : 'Document uploaded.',
+        processingStatus: result.indexing.result.processingStatus,
+        chunkCount: result.indexing.result.chunkCount,
+        reusedDocument: result.reusedDocument,
+        reusedExistingIndex: result.indexing.result.reusedExistingIndex,
+        cleanupPending: result.indexing.result.cleanupPending,
+      });
+    } catch (error) {
+      if (error instanceof DocumentUploadValidationError) {
+        res.status(error.status).json({ error: { code: error.code, message: error.message } });
+        return;
+      }
 
-      res.status(201).json({ id, message: 'Document added.' });
+      if (error instanceof DocumentStorageError) {
+        console.error('Document upload storage failure:', error.cause);
+        res.status(500).json({
+          error: { code: 'FILE_STORAGE_FAILED', message: 'Could not store the uploaded file. Please try again.' },
+        });
+        return;
+      }
+
+      if (error instanceof DocumentUploadCleanupError) {
+        console.error('Could not remove an uploaded file after document creation failed:', error.cleanupError);
+        res.status(500).json({
+          error: { code: 'DOCUMENT_ROLLBACK_FAILED', message: 'Could not complete the upload and clean up its stored file.' },
+        });
+        return;
+      }
+
+      const procError = error as { number?: unknown; originalError?: { info?: { number?: unknown } } };
+      const number = procError.number ?? procError.originalError?.info?.number;
+      if (number === 50001) {
+        res.status(409).json({ error: { code: 'DOCUMENT_EXISTS', message: 'Document already exists.' } });
+        return;
+      }
+      if (number === 50002) {
+        res.status(404).json({ error: { code: 'PROJECT_NOT_FOUND', message: 'Project not found.' } });
+        return;
+      }
+      if (number === 50003) {
+        res.status(401).json({ error: { code: 'UPLOADER_NOT_FOUND', message: 'Your session is no longer valid. Please sign in again.' } });
+        return;
+      }
+      next(error);
+    }
+  });
+
+  app.post('/api/documents/:id/index', requireUser, async (req, res, next) => {
+    try {
+      const documentId = param(req.params['id']);
+      const document = await Documents.getDocumentForProcessing(documentId);
+      if (!document) {
+        res.status(404).json({ error: { code: 'DOCUMENT_NOT_FOUND', message: 'Document not found.' } });
+        return;
+      }
+
+      const currentUser = res.locals.user as import('./db/types.js').UserRow;
+      if (document.project_id === null) {
+        if (document.uploaded_by !== currentUser.id) {
+          res.status(403).json({ error: { code: 'DOCUMENT_ACCESS_DENIED', message: 'You do not have access to retry this document.' } });
+          return;
+        }
+      } else {
+        const members = await Projects.getProjectMembers(document.project_id);
+        if (!members.some((member) => member.user_id === currentUser.id)) {
+          res.status(403).json({ error: { code: 'DOCUMENT_ACCESS_DENIED', message: 'You do not have access to retry this document.' } });
+          return;
+        }
+      }
+
+      if (!document.file_name || !document.file_path) {
+        res.status(409).json({
+          error: { code: 'DOCUMENT_FILE_UNAVAILABLE', message: 'This document does not have a valid stored file to process.' },
+        });
+        return;
+      }
+
+      const processing = await processStoredDocument(
+        {
+          documentId,
+          projectId: document.project_id,
+          originalFilename: document.file_name,
+          filePath: document.file_path,
+        },
+        { uploadDirectory: DOCUMENT_UPLOAD_DIRECTORY },
+      );
+      if (processing.processingStatus === 'failed' || !processing.sourceHash) {
+        const currentVersionRows = await documentChunkMappings.list(documentId, processing.sourceHash);
+        const incompleteVersions = new Set(currentVersionRows
+          .filter((row) => row.status !== 'indexed')
+          .map((row) => row.doc_ver));
+        for (const docVer of incompleteVersions) {
+          await documentChunkMappings.updateStatus(
+            documentId,
+            docVer,
+            'failed',
+            processing.extractionError?.message ?? 'Document extraction failed.',
+          );
+        }
+        res.status(422).json({
+          error: {
+            code: processing.extractionError?.code ?? 'DOCUMENT_PROCESSING_FAILED',
+            message: processing.extractionError?.message ?? 'The document could not be processed.',
+          },
+          documentId,
+          processingStatus: 'failed',
+        });
+        return;
+      }
+
+      try {
+        const indexing = await indexProcessedDocument({
+          documentId,
+          projectId: document.project_id,
+          docVer: processing.sourceHash,
+          chunks: processing.chunks,
+        });
+        res.json({
+          documentId,
+          processingStatus: indexing.processingStatus,
+          chunkCount: indexing.chunkCount,
+          reusedExistingIndex: indexing.reusedExistingIndex,
+          cleanupPending: indexing.cleanupPending,
+          ...(indexing.cleanupError === undefined ? {} : { cleanupError: indexing.cleanupError }),
+        });
+      } catch (error) {
+        const code = error instanceof DocumentIndexingError ? error.code : 'DOCUMENT_INDEXING_FAILED';
+        console.error('[DOCUMENT_INDEXING] retry failed', { documentId, code });
+        res.status(503).json({
+          error: { code, message: 'The document could not be indexed. Its current mappings are retained for retry.' },
+          documentId,
+          processingStatus: 'failed',
+        });
+      }
     } catch (error) {
       next(error);
     }
@@ -755,9 +1161,24 @@ export function createApp(): express.Express {
 
   app.delete('/api/documents/:id', requireUser, async (req, res, next) => {
     try {
-      await Documents.deleteDocument(param(req.params['id']));
+      const documentId = param(req.params['id']);
+      const mappings = await documentChunkMappings.list(documentId);
+      const vectorIds = mappings.map((mapping) => mapping.vector_id);
+      if (vectorIds.length > 0) {
+        await new QdrantService().deletePoints(vectorIds);
+        for (const docVer of new Set(mappings.map((mapping) => mapping.doc_ver))) {
+          await documentChunkMappings.deleteVersion(documentId, docVer);
+        }
+      }
+      await Documents.deleteDocument(documentId);
       res.json({ message: 'Document deleted.' });
     } catch (error) {
+      if (error instanceof QdrantServiceError) {
+        res.status(503).json({
+          error: { code: 'VECTOR_STORE_UNAVAILABLE', message: 'Could not safely remove the document vectors. Please try again.' },
+        });
+        return;
+      }
       next(error);
     }
   });

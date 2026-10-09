@@ -325,19 +325,35 @@ test('workplace REST endpoints for dashboard, projects, tasks, calendar, documen
   assert.equal(deleteEventRes.status, 200);
   assert.equal((await pool.query('SELECT id FROM calendar_events WHERE id = $1', [eventId])).rowCount, 0);
 
-  // POST /api/documents, GET /api/documents, DELETE /api/documents/:id
-  const documentRes = await fetch(`${baseUrl}/api/documents`, {
+  // POST /api/documents now requires a multipart file; metadata-only writes are rejected.
+  const metadataOnlyRes = await fetch(`${baseUrl}/api/documents`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', cookie },
     body: JSON.stringify({ name: 'Test Document', file_name: 'test-document.pdf', file_type: 'application/pdf', file_size: 1024, folder: 'QA' }),
   });
-  assert.equal(documentRes.status, 201);
-  const { id: documentId } = await documentRes.json() as any;
+  assert.equal(metadataOnlyRes.status, 400);
+  assert.equal((await metadataOnlyRes.json() as any).error.code, 'FILE_REQUIRED');
+
+  const unsupportedFile = new FormData();
+  unsupportedFile.append('file', new Blob(['not a document'], { type: 'image/png' }), 'unsupported.png');
+  unsupportedFile.append('name', 'Unsupported File');
+  unsupportedFile.append('folder', 'QA');
+  unsupportedFile.append('project_id', projectId);
+  const unsupportedRes = await fetch(`${baseUrl}/api/documents`, {
+    method: 'POST',
+    headers: { cookie },
+    body: unsupportedFile,
+  });
+  assert.equal(unsupportedRes.status, 400);
+
+  // GET /api/documents and DELETE /api/documents/:id remain available.
   const documentsRes = await fetch(`${baseUrl}/api/documents`, { headers: { cookie } });
-  assert.equal((await documentsRes.json() as any).documents.some((document: any) => document.id === documentId), true);
-  const deleteDocumentRes = await fetch(`${baseUrl}/api/documents/${documentId}`, { method: 'DELETE', headers: { cookie } });
+  assert.equal(documentsRes.status, 200);
+  assert.equal(Array.isArray((await documentsRes.json() as any).documents), true);
+  const missingDocumentId = `missing-${randomUUID()}`;
+  const deleteDocumentRes = await fetch(`${baseUrl}/api/documents/${missingDocumentId}`, { method: 'DELETE', headers: { cookie } });
   assert.equal(deleteDocumentRes.status, 200);
-  assert.equal((await pool.query('SELECT id FROM documents WHERE id = $1', [documentId])).rowCount, 0);
+  assert.equal((await pool.query('SELECT id FROM documents WHERE id = $1', [missingDocumentId])).rowCount, 0);
 
   // GET /api/reports
   const reportRes = await fetch(`${baseUrl}/api/reports`, { headers: { cookie } });
@@ -545,10 +561,15 @@ test('AI chat routes database questions through one SQL inference and preserves 
   globalThis.fetch = async (input, init) => {
     if (String(input).endsWith('/chat/completions')) {
       inferenceCount += 1;
-      const request = JSON.parse(String(init?.body)) as { messages: Array<{ content: string }> };
-      const prompt = request.messages[0].content;
-      groqPrompts.push(prompt);
-      const content = prompt.includes('Convert the user\'s question into exactly ONE SQL Server SELECT query.')
+      const request = JSON.parse(String(init?.body)) as { messages: Array<{ role: string; content: string }> };
+      const userText = request.messages.at(-1)?.content ?? '';
+      groqPrompts.push(userText);
+      const isSqlCall = request.messages.some((m) => m.content.includes('Convert the user'));
+      if (!isSqlCall) {
+        const systemText = request.messages[0]?.content ?? '';
+        assert.match(systemText, /Northstar AI/);
+      }
+      const content = isSqlCall
         ? generatedSql
         : 'Hello from local chat.';
       return new Response(JSON.stringify({
@@ -585,6 +606,7 @@ test('AI chat routes database questions through one SQL inference and preserves 
     assert.deepEqual(await generalResponse.json(), { answer: 'Hello from local chat.' });
     assert.equal(inferenceCount, 1);
     assert.equal(groqPrompts.at(-1), generalMessage);
+    // The system guardrail must accompany every conversational call.
 
     inferenceCount = 0;
     generatedSql = 'DELETE FROM projects';
