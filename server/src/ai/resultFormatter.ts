@@ -26,6 +26,12 @@ function canonicalKey(key: string): string { return key.toLowerCase().replace(/[
 function contractMatches(column: string, field: string, plan: ResponsePlan): boolean {
   const col = canonicalKey(column), key = canonicalKey(field);
   if (col === key) return true;
+  // Fix 1: a contract field's declared display label is a valid result-column
+  // alias (e.g. key 'title' with label 'Task' accepts column 'Task'). The
+  // missing-field check itself is unchanged — this only widens what counts
+  // as satisfying a declared field.
+  const declared = (plan.dataContract?.fields ?? []).find((candidate) => candidate.key === field);
+  if (declared && col === canonicalKey(declared.label)) return true;
   if (field === 'project_name') return ['project', 'projectname'].includes(col) || plan.entity === 'projects' && col === 'name';
   if (field === 'action' && plan.entity === 'activities') return col === 'activity';
   if (field === 'entity_type' && plan.entity === 'activities') return ['entity', 'type'].includes(col);

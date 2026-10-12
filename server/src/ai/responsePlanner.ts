@@ -67,7 +67,13 @@ function projectReference(text: string, entity: string): string | undefined {
   const match = relation ?? explicit;
   const raw = match?.[1] ?? match?.[2];
   const candidate = raw?.trim().replace(/\s+project$/i, '').replace(/^(?:the\s+)?project\s+/i, '').replace(/^(?:the|a|an)\s+/i, '').replace(/[?.!,]+$/, '').trim();
-  return candidate && !isBareEntity(candidate) && candidate.toLowerCase() !== 'each' ? candidate : undefined;
+  if (!candidate || isBareEntity(candidate) || candidate.toLowerCase() === 'each') return undefined;
+  // Fix 2: "in total" is an aggregate idiom, not a project reference. Only the
+  // bare idiom is rejected — and only when the match contains no explicit
+  // "project" word, so genuine references like "in the project Total" or
+  // "the Total project" still resolve.
+  if (candidate.toLowerCase() === 'total' && !/\bproject\b/i.test(match?.[0] ?? '')) return undefined;
+  return candidate;
 }
 
 function field(key: string, label: string, type: FieldType = 'text'): DataField { return { key, label, type }; }

@@ -409,3 +409,34 @@ test('P3b routing: schema veto narrows to schema-subject questions (questions.tx
   // Negative: document-inventory queries remain on SQL.
   assert.equal(isDatabaseQuestion('How many documents are stored in the database?'), true, 'SQL §1 #9 inventory stays SQL');
 });
+
+test('fix1: contract accepts declared label aliases for task-title columns', () => {
+  const plan = planDatabaseResponse('Show all tasks');
+  assert.equal(plan.dataContract.fields[0]?.key, 'title');
+  assert.equal(plan.dataContract.fields[0]?.label, 'Task');
+  // All three alias shapes satisfy the 'title' contract field.
+  assert.deepEqual(validateContractCoverage([{ Task: 'Fix login bug' }], plan), []);
+  assert.deepEqual(validateContractCoverage([{ title: 'Fix login bug' }], plan), []);
+  assert.deepEqual(validateContractCoverage([{ task_title: 'Fix login bug' }], plan), []);
+  // The missing-field check is not weakened: a row without any title-shaped
+  // column still reports the missing contract field.
+  assert.deepEqual(validateContractCoverage([{ Status: 'TODO' }], plan), ['title']);
+  // Count-plan single-column behavior is unchanged.
+  const countPlan = planDatabaseResponse('How many tasks are completed?');
+  assert.equal(countPlan.intent, 'count');
+  assert.deepEqual(validateContractCoverage([{ count: 19 }], countPlan), []);
+});
+
+test('fix2: "in total" count question is not a project reference', () => {
+  const plan = planDatabaseResponse('How many tasks are there in total?');
+  assert.equal(plan.intent, 'count');
+  assert.equal(plan.projectReference, undefined);
+  assert.equal(plan.resolvedProjectId, undefined);
+  // Genuine project references named Total / containing aggregate words still resolve
+  // when phrased with the word "project".
+  assert.equal(planDatabaseResponse('Show tasks in the project Total').projectReference, 'Total');
+  assert.equal(planDatabaseResponse('Show tasks in the General Services project').projectReference, 'General Services');
+  assert.equal(planDatabaseResponse('Show tasks in the Aggregate Insights project').projectReference, 'Aggregate Insights');
+  // Existing project-reference extraction is unchanged.
+  assert.equal(planDatabaseResponse('Show me the tasks in Project Phoenix').projectReference, 'Phoenix');
+});
