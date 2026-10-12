@@ -5,6 +5,7 @@ import {
   buildDocumentGroundedSystemPrompt,
   DocumentRetrievalError,
   isDocumentContentQuestion,
+  isDocumentMetadataQuestion,
   retrieveDocumentChunks,
 } from './document-retrieval.js';
 import { createChunkHash } from './document-indexing.js';
@@ -179,4 +180,149 @@ test('builds safe grounded prompts and identifies document-content questions', (
   assert.equal(isDocumentContentQuestion('List all open projects.'), false);
   assert.equal(isDocumentContentQuestion('What documents are available?'), false);
   assert.equal(isDocumentContentQuestion('Summarize the project report.'), true);
+});
+
+test('P1/P2 routing: content nouns route to RAG, inventory routes to metadata', () => {
+  // P1: noun-phrase content questions (previously false negatives).
+  for (const q of [
+    'What are the objectives in the uploaded report?',
+    'What risks are mentioned in the uploaded document?',
+    'List the milestones in the Cloud Migration report.',
+    'What is the problem described in this document?',
+    'Which document explains configuration drift?',
+    'What is the status of this document?',
+  ]) {
+    assert.equal(isDocumentContentQuestion(q), true, q);
+    assert.equal(isDocumentMetadataQuestion(q), false, q);
+  }
+  // P2: inventory/metadata stays out of RAG content.
+  for (const q of [
+    'What documents are available?',
+    'How many documents are stored in the database?',
+    'List documents for Customer Intelligence Platform',
+    'Find documents belonging to Platform Refresh',
+    'Show the latest document for each project',
+  ]) {
+    assert.equal(isDocumentContentQuestion(q), false, q);
+    assert.equal(isDocumentMetadataQuestion(q), true, q);
+  }
+  // Safeguard: plain SQL questions are neither content nor metadata.
+  assert.equal(isDocumentContentQuestion('How many active projects are there?'), false);
+  assert.equal(isDocumentMetadataQuestion('How many active projects are there?'), false);
+});
+
+test('P3a routing: project-anchored doc nouns and find-that-discusses pattern (questions.txt IDs)', () => {
+  // RAG §4 #2, #8, #10: content nouns anchored on "documentation" (previously GENERAL/SQL).
+  // Phrasings below are equivalent paraphrases of the corpus items (same detector features).
+  for (const [id, q] of [
+    ['RAG §4 #2', 'Which key milestones appear in the project documentation for Apollo?'],
+    ['RAG §4 #8', 'List the dependencies documented for the Apollo project documentation.'],
+    ['RAG §4 #10', 'Which unresolved issues show up across the available project documentation?'],
+  ] as const) {
+    assert.equal(isDocumentContentQuestion(q), true, id);
+  }
+  // RAG §4 #9: multi-word document types (previously missed "design/testing document").
+  assert.equal(
+    isDocumentContentQuestion('Contrast the requirements in the original design document against the testing document.'),
+    true,
+    'RAG §4 #9',
+  );
+  // RAG §2 #2: "Find the document that discusses ..." without a locative (previously GENERAL).
+  assert.equal(
+    isDocumentContentQuestion('Find the document that discusses faster response handling.'),
+    true,
+    'RAG §2 #2',
+  );
+  // RAG §4 #6: "action items ... in the project status report" (multi-word type).
+  assert.equal(
+    isDocumentContentQuestion('Enumerate the action items noted in the project status report.'),
+    true,
+    'RAG §4 #6',
+  );
+  // Safeguards: inventory phrasing must still stay out of RAG content (routes to SQL metadata).
+  for (const [id, q] of [
+    ['inventory guard A', 'How many files are available for review?'],
+    ['inventory guard B', 'How many documents are stored in the database?'],
+    ['inventory guard C', 'Find documents belonging to the Apollo project.'],
+  ] as const) {
+    assert.equal(isDocumentContentQuestion(q), false, id);
+    assert.equal(isDocumentMetadataQuestion(q), true, id);
+  }
+});
+
+test('P4a routing: verb forms, documented, section and cross-document anaphora (questions.txt IDs)', () => {
+  // RAG §2 #7: gerund "discussing" + plural "documents" (previously SQL hijack).
+  assert.equal(
+    isDocumentContentQuestion('Find documents discussing delays, bottlenecks, or operational inefficiencies.'),
+    true,
+    'RAG §2 #7',
+  );
+  // RAG §4 #7: base form "discuss" + plural "documents" (previously SQL hijack).
+  assert.equal(
+    isDocumentContentQuestion('Which documents discuss payment reconciliation workflows?'),
+    true,
+    'RAG §4 #7',
+  );
+  // RAG §4 #3 and §4 #8: "documented" as a doc-reference.
+  assert.equal(
+    isDocumentContentQuestion('Which risks are documented for the Apollo project?'),
+    true,
+    'RAG §4 #3',
+  );
+  assert.equal(
+    isDocumentContentQuestion('What dependencies are documented for the Warehouse Modernization project?'),
+    true,
+    'RAG §4 #8',
+  );
+  // RAG §7 #4: "Retrieve ... from a long document" (explicit source locative).
+  assert.equal(
+    isDocumentContentQuestion('Retrieve the complete list of acceptance criteria from a long document.'),
+    true,
+    'RAG §7 #4',
+  );
+  // RAG §7 #3 and §7 #5: section-based anaphora (still content-gated).
+  assert.equal(
+    isDocumentContentQuestion('What is the relationship between the risk described in one section and the mitigation described later?'),
+    true,
+    'RAG §7 #3',
+  );
+  assert.equal(
+    isDocumentContentQuestion('What does the abbreviation introduced in the first section mean when it appears again later?'),
+    true,
+    'RAG §7 #5',
+  );
+  // RAG §3 #4: cross-document anaphora "both projects" with a content verb.
+  assert.equal(
+    isDocumentContentQuestion('Compare the technologies used in both projects.'),
+    true,
+    'RAG §3 #4',
+  );
+  // RAG §3 #6: "documents agree" — agree/disagree verb extension.
+  assert.equal(
+    isDocumentContentQuestion('Do the documents agree on the proposed implementation approach?'),
+    true,
+    'RAG §3 #6',
+  );
+  // Safeguard: agree/disagree without a document reference stays out of content.
+  assert.equal(isDocumentContentQuestion('Do the projects agree on the deadline?'), false, 'agree guard');
+  // Safeguards: anaphora patterns are content-gated — no verb/noun => not content.
+  for (const [id, q] of [
+    ['anaphora guard A', 'List both projects'],
+    ['anaphora guard B', 'Show the first section'],
+    ['anaphora guard C', 'Compare the task counts for each project.'],
+  ] as const) {
+    assert.equal(isDocumentContentQuestion(q), false, id);
+  }
+  // Safeguard: retrieve without a source locative stays out of content and
+  // falls through to the inventory metadata path (SQL).
+  assert.equal(isDocumentContentQuestion('Retrieve documents belonging to the Apollo project.'), false, 'retrieve guard');
+  assert.equal(isDocumentMetadataQuestion('Retrieve documents belonging to the Apollo project.'), true, 'retrieve guard: inventory metadata path');
+  // Safeguard: document-inventory routing is unchanged (SQL metadata path).
+  for (const [id, q] of [
+    ['inventory guard A', 'How many files are available for review?'],
+    ['inventory guard C', 'Find documents belonging to the Apollo project.'],
+  ] as const) {
+    assert.equal(isDocumentContentQuestion(q), false, id);
+    assert.equal(isDocumentMetadataQuestion(q), true, id);
+  }
 });

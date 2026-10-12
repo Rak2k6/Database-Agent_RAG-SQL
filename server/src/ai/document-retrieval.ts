@@ -41,15 +41,74 @@ export class DocumentRetrievalError extends Error {
   }
 }
 
-export function isDocumentContentQuestion(message: string): boolean {
-  const refersToDocuments = /\b(?:docs?|documents?|files?|reports?|polic(?:y|ies)|contracts?|specifications?|specs?|uploaded|notes?|manuals?|handbooks?|requirements?)\b/i;
-  if (!refersToDocuments.test(message)) return false;
+export function isDocumentMetadataQuestion(message: string): boolean {
+  const mentionsInventoryNoun = /\b(?:documents?|files?)\b/i.test(message);
+  if (!mentionsInventoryNoun) return false;
+  if (isDocumentContentQuestion(message)) return false;
   return (
+    /\bhow\s+many\b/i.test(message) ||
+    /^\s*(?:list|show|find|search)\b/i.test(message) ||
+    /\bbelonging\b/i.test(message) ||
+    /\buploaded\s+by\b/i.test(message) ||
+    /\blatest\b/i.test(message) ||
+    /\bversion\b/i.test(message) ||
+    /\beach\s+project\b/i.test(message) ||
+    /\bstored\s+in\s+the\s+database\b/i.test(message) ||
+    /\bavailable\b/i.test(message)
+  );
+}
+
+export function isDocumentContentQuestion(message: string): boolean {
+  const refersToDocuments =
+    /\b(?:docs?|documents?|documentation|documented|files?|reports?|status\s+reports?|design\s+documents?|testing\s+documents?|polic(?:y|ies)|contracts?|specifications?|specs?|uploaded|notes?|manuals?|handbooks?|requirements?)\b/i;
+  // P4a: narrowly scoped anaphoric doc-references. These still require one of
+  // the existing content gates below — the document-reference requirement is
+  // never removed globally.
+  const sectionAnaphora = /\b(?:one|the|each|a|this|that|same|first|last|next)\s+section\b/i;
+  const crossDocument = /\b(?:both|two)\s+(?:the\s+)?(?:projects?|reports?|documents?|files?)\b/i;
+  if (!refersToDocuments.test(message) && !sectionAnaphora.test(message) && !crossDocument.test(message)) return false;
+  if (
     /\b(?:summari[sz]e|explain|compare)\b/i.test(message) ||
-    /\b(?:say|mention|contain|include|state|cover|describe|recommend|require|specify)\b/i.test(message) ||
+    /\b(?:say|mention|contain|include|state|cover|describe|recommend|require|specify|agree|disagree)\b/i.test(message) ||
     /\b(?:according\s+to|based\s+on)\b/i.test(message) ||
     /\b(?:find|search)\b.*\b(?:in|within|inside)\b/i.test(message)
-  );
+  ) {
+    return true;
+  }
+  if (
+    /\b(?:objectives?|requirements?|milestones?|risks?|deliverables?|conclusions?|audiences?|recommendations?|deadlines?|dependenc(?:y|ies)|technolog(?:y|ies)|tools?|problems?|action\s+items?|unresolved\s+issues?|abbreviations?|acronyms?)\b/i.test(
+      message,
+    )
+  ) {
+    return true;
+  }
+  if (/\bwhat\b.*\b(?:is|are)\b.*\b(?:this|the|that)\b.*\b(?:document|report|file)\b/i.test(message)) {
+    return true;
+  }
+  if (/\bwhich\b.*\b(?:documents?|reports?)\b.*\b(?:explains?|explained|describes?|described|discusses?|discussed|discuss|discussing|covers?|covered|contains?|contained)\b/i.test(
+    message,
+  )) {
+    return true;
+  }
+  // P3a: "Find the document that discusses/describes/explains ..." (no locative needed).
+  if (
+    /\bfind\b.*\b(?:documents?|reports?|documentation)\b.*\b(?:that\s+)?(?:discusses?|discussed|discuss|discussing|describes?|described|explains?|explained)\b/i.test(
+      message,
+    )
+  ) {
+    return true;
+  }
+  // P4a: "Retrieve ... from/in a document ..." — requires an explicit source
+  // locative so bare inventory phrasing ("Retrieve documents for project X")
+  // never reaches the content path.
+  if (
+    /\bretriev(?:e|ing)\b.*\b(?:from|in|within)\b.*\b(?:documents?|reports?|documentation)\b/i.test(
+      message,
+    )
+  ) {
+    return true;
+  }
+  return false;
 }
 
 function chunkKey(documentId: string, docVer: string, chunkIndex: number): string {

@@ -1,0 +1,155 @@
+
+RAG CHATBOT
+
+1. Basic document retrieval
+These questions check whether the chatbot can find and understand information in an indexed document.
+1. What is the main objective of this document?
+2. Summarize this document in five bullet points.
+3. What problem is this document trying to solve?
+4. What are the key requirements mentioned in the document?
+5. What technologies or tools are mentioned?
+6. What are the main deliverables described in the document?
+7. What are the major conclusions of this document?
+8. What are the important dates, deadlines, or milestones mentioned?
+9. Who is the intended audience of this document?
+10. What recommendations does the document provide?
+2. Semantic search
+These questions test whether the RAG pipeline understands meaning instead of matching exact keywords.
+1. Which document explains how the system handles failures?
+2. Find the document that discusses improving application performance.
+3. Which document describes how user information is protected?
+4. What documents mention strategies for reducing infrastructure costs?
+5. Find the requirements related to access control, even if they use different terminology.
+6. Which document explains how data moves between system components?
+7. Find documents discussing delays, bottlenecks, or operational inefficiencies.
+8. Which document describes the process for recovering from a failed operation?
+3. Multi-document reasoning
+These questions test whether the chatbot can retrieve information from multiple documents and synthesize a grounded answer.
+1. Compare the objectives of the two project documents.
+2. What requirements are common across these documents?
+3. Which document proposes a different solution to the same problem?
+4. Compare the technologies used in both projects.
+5. What risks are identified across all the relevant documents?
+6. Do the documents agree on the proposed implementation approach?
+7. What dependencies exist between the projects described in these documents?
+8. Summarize the common recommendations and highlight the differences.
+4. Questions specific to Northstar AI Workplace
+These are useful for your corporate project-management platform, where documents are associated with projects, users, and other metadata.
+1. Summarize the latest project status report for Cloud Infrastructure Migration.
+2. What are the key milestones mentioned in the project documentation?
+3. Which risks are documented for the Platform Refresh project?
+4. What technical requirements are specified for the Customer Intelligence Platform?
+5. Which documents describe security or compliance requirements?
+6. What action items are mentioned in the project status report?
+7. Which documents discuss payment reconciliation workflows?
+8. What dependencies are documented for the Data Warehouse Modernization project?
+9. Compare the requirements in the original design document with the testing document.
+10. What unresolved issues are mentioned in the available project documentation?
+5. Metadata filtering and access control
+These tests are particularly important if your RAG system uses SQL metadata and Qdrant vector search.
+1. Find documents belonging to the Platform Refresh project.
+2. Retrieve documents uploaded by a particular team member.
+3. Find documents associated with a specific project and containing security requirements.
+4. Search for documents uploaded within a specified date range.
+5. Find the latest version of the design document for a project.
+6. Can a user retrieve documents belonging to a project they are not authorized to access?
+7. If two projects contain similar documents, can the chatbot return only the documents belonging to the requested project?
+For questions 6 and 7, use separate test accounts or controlled test fixtures. Access control must be enforced by the backend, not merely by the LLM prompt.
+6. Hallucination and negative testing
+These questions test whether the chatbot knows when the indexed documents do not contain the answer.
+1. What is the approved budget for this project? (Use a document that contains no budget.)
+2. Who approved the project? (Ensure the approver is not mentioned.)
+3. What is the exact completion date? (Use documents with no confirmed date.)
+4. Which programming language was used? (Choose a document that does not specify one.)
+5. What does the document say about a topic that is never mentioned?
+6. Can you provide a quotation supporting a claim that is absent from the source?
+7. If two documents provide conflicting deadlines, can you identify the conflict instead of choosing one arbitrarily?
+8. If no relevant document exists, will the chatbot explicitly say that it cannot find sufficient information?
+Expected behavior: The chatbot should distinguish documented facts from inferences, identify conflicting evidence, and avoid inventing missing details.
+7. Chunking and retrieval quality
+These questions help expose weaknesses in document extraction, chunking, embedding generation, and top-\(k\) retrieval.
+1. What is the third requirement listed under the implementation section?
+2. What condition must be satisfied before the next workflow step begins?
+3. What is the relationship between the risk described in one section and the mitigation described later?
+4. Retrieve the complete list of acceptance criteria from a long document.
+5. What does the abbreviation introduced in the first section mean when it appears again later?
+6. Find a specific requirement located near the end of a long report.
+7. Can the chatbot answer a question that uses a synonym rather than the exact wording in the document?
+8. Does the answer remain correct when the same information appears in several overlapping chunks?
+
+
+
+SQL CHATBOT
+
+Basic SQL questions
+These test simple SELECT, COUNT, and filtering operations.
+1. How many active projects are there?
+2. List all projects in the database.
+3. How many tasks are marked as completed?
+4. Show all pending tasks.
+5. List all team members.
+6. How many users are registered in the system?
+7. Show the names of all projects created recently.
+8. List the tasks assigned to a specific employee.
+9. How many documents are stored in the database?
+10. Show the five most recently created activities.
+2. Filtering and sorting
+These test WHERE, ORDER BY, and LIMIT.
+1. List all projects with active status.
+2. Find all tasks assigned to Jordan Lee.
+3. Show tasks that are overdue.
+4. List projects created after a specified date.
+5. Show the most recently updated projects.
+6. Find tasks due within the next seven days.
+7. List the top five projects with the most tasks.
+8. Show all activities performed by a particular user.
+9. Find documents belonging to the Platform Refresh project.
+10. List tasks that are not completed and are assigned to a particular team member.
+3. Aggregation and analytics
+These test COUNT, GROUP BY, SUM, and related operations.
+1. How many tasks are assigned to each team member?
+2. How many tasks are completed, pending, and in progress?
+3. Which project has the highest number of tasks?
+4. What is the average number of tasks per project?
+5. How many projects are associated with each status?
+6. Which team member has completed the most tasks?
+7. How many activities were recorded each day this week?
+8. Which projects have more than ten tasks?
+9. How many documents belong to each project?
+10. Which team members have no tasks assigned to them?
+4. JOIN-based questions
+These are particularly useful for testing whether the chatbot understands relationships between database tables.
+1. Show each task alongside its project name.
+2. List each task with the assigned employee's name.
+3. Show all projects along with their task counts.
+4. List each document with its project name and uploader.
+5. Show the latest activity with the user's name and the related entity.
+6. Which employees are working on each project?
+7. Find projects that do not have any tasks.
+8. List team members and the projects they are associated with.
+9. Show all overdue tasks along with the project manager's name, if that relationship exists in the schema.
+10. Display each project's name, task count, and completed task count.
+5. Advanced SQL reasoning
+These test multi-step queries, subqueries, conditional aggregation, and date calculations.
+1. Which project has the highest task completion percentage?
+2. Find team members whose completed task count is above the overall average.
+3. Which projects have tasks that remain incomplete past their due dates?
+4. What percentage of all tasks are completed?
+5. Which projects have had no recorded activity in the last 30 days?
+6. Find employees assigned to tasks in more than three projects.
+7. Which project has the highest number of overdue tasks?
+8. Compare the total and completed task counts for each project.
+9. Which team members have completed all the tasks assigned to them?
+10. Identify projects with no associated documents.
+6. Northstar-specific questions
+These focus on your application tables: projects, tasks, team members, documents, activities, events, and notifications.
+1. How many active projects are currently in the system?
+2. What are the latest activities recorded in the database?
+3. How many tasks has Jordan Lee completed?
+4. Which projects have the most pending tasks?
+5. Show all documents uploaded by a specific user.
+6. How many calendar events are scheduled for the coming week?
+7. Which team members have overdue tasks?
+8. Show the latest document uploaded for each project.
+9. Which projects have not been updated recently?
+10. How many unread notifications does each user have?

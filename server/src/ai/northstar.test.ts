@@ -11,6 +11,7 @@ import {
   validateNorthstarResponse,
 } from './northstar.js';
 import { isDatabaseQuestion } from './databaseQuery.js';
+import { isDocumentContentQuestion } from './document-retrieval.js';
 import { planDatabaseResponse } from './responsePlanner.js';
 import { formatDatabaseAnswer, buildResultTable, resolvePresentation, columnMetadata, validateContractCoverage } from './resultFormatter.js';
 
@@ -353,4 +354,58 @@ test('routing and planning regressions stay in domain context', () => {
   assert.ok(documents.filters.includes('project reference = Customer Intelligence Platform'));
   assert.equal(planDatabaseResponse('how many active projects').dataContract.fields[0]?.key, 'count');
   assert.equal(planDatabaseResponse('count completed tasks').dataContract.fields[0]?.key, 'count');
+});
+
+test('P2 routing: document content never routes to SQL, inventory does', () => {
+  for (const question of [
+    'What risks are mentioned in the uploaded document?',
+    'What are the objectives in the uploaded report?',
+    'Summarize the project report.',
+    'Which document explains configuration drift?',
+  ]) {
+    assert.equal(isDatabaseQuestion(question), false, question);
+  }
+  for (const question of [
+    'What documents are available?',
+    'How many documents are stored in the database?',
+    'List documents for Customer Intelligence Platform',
+  ]) {
+    assert.equal(isDatabaseQuestion(question), true, question);
+  }
+});
+
+test('P3b routing: schema veto narrows to schema-subject questions (questions.txt IDs)', () => {
+  // SQL §4 #9: entity words precede the incidental "in the schema" mention
+  // → must route to DATABASE (was a GENERAL false negative before P3b).
+  assert.equal(
+    isDatabaseQuestion(
+      "Show all overdue tasks along with the project manager's name, if that relationship exists in the schema.",
+    ),
+    true,
+    'SQL §4 #9',
+  );
+  // Boundary: mixed entity/schema phrase where the entity word precedes the
+  // schema/columns mention → not vetoed, routes to SQL.
+  assert.equal(isDatabaseQuestion('list tasks and their columns'), true, 'boundary: entity before columns');
+  assert.equal(
+    isDatabaseQuestion('show overdue tasks referencing the status column'),
+    true,
+    'boundary: entity before column',
+  );
+  // Boundary: schema/columns remains the subject → still vetoed.
+  assert.equal(isDatabaseQuestion('show the columns of the tasks table'), false, 'boundary: columns before entity');
+  assert.equal(isDatabaseQuestion('what is the schema of users'), false, 'schema subject stays non-SQL');
+  // Security negatives pinned by existing tests must remain false.
+  for (const question of ['what tables can you access', 'show details from password_reset table']) {
+    assert.equal(isDatabaseQuestion(question), false, question);
+  }
+  // Negative: document-content questions are never redirected to SQL.
+  assert.equal(isDocumentContentQuestion('Compare the requirements in the original design document with the testing document.'), true, 'RAG §4 #9 content detector');
+  assert.equal(
+    isDatabaseQuestion('Compare the requirements in the original design document with the testing document.'),
+    false,
+    'RAG §4 #9 never routes to SQL',
+  );
+  // Negative: document-inventory queries remain on SQL.
+  assert.equal(isDatabaseQuestion('How many documents are stored in the database?'), true, 'SQL §1 #9 inventory stays SQL');
 });

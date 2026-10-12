@@ -4,6 +4,7 @@ import { formatDatabaseAnswer, buildResultTable, validateContractCoverage, resol
 import { planDatabaseResponse, type ResponsePlan } from './responsePlanner.js';
 import { clarifyOrNotFound, resolveName } from './entityResolution.js';
 import { answerDatabaseQuestionLlmFirst, resolveSqlPipeline } from './llmFirstSql.js';
+import { isDocumentContentQuestion, isDocumentMetadataQuestion } from './document-retrieval.js';
 
 export interface DatabaseQueryResult {
   sql: string;
@@ -78,6 +79,19 @@ const WORKSPACE_ENTITY =
 
 export function isDatabaseQuestion(question: string): boolean {
   const text = question.trim();
-  if (!text || /\b(?:schema|columns?)\b/i.test(text)) return false;
+  if (!text) return false;
+  // P3b: the schema/columns veto only applies when schema/columns is the
+  // subject of the question — i.e. it appears before the first workspace
+  // entity word, or the question has no workspace entity at all. Incidental
+  // mentions after an entity ("... exists in the schema") must still route.
+  const schemaIndex = text.search(/\b(?:schema|columns?)\b/i);
+  if (schemaIndex !== -1) {
+    const entityIndex = text.search(WORKSPACE_ENTITY);
+    if (entityIndex === -1 || schemaIndex < entityIndex) return false;
+  }
+  // P2: document content wins — never hijack RAG content questions into SQL.
+  if (isDocumentContentQuestion(text)) return false;
+  // P2: live document inventory/metadata is a DATABASE query (dbo.documents).
+  if (isDocumentMetadataQuestion(text)) return true;
   return WORKSPACE_ENTITY.test(text) || /\bworking\s+on\b/i.test(text);
 }
